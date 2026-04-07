@@ -254,7 +254,12 @@ async def unified_message(
                 context_parts.append(f"[Legal documents found: {legal_context}]")
         
         # 5. Generate Final Response
-        if legal_results:
+        # Image-first behavior: when image is provided, answer from image analysis.
+        if image is not None and image_analysis_text:
+            final_response = image_analysis_text
+            if not detected_language:
+                detected_language = multilingual_chat_service.detect_language(final_message)
+        elif legal_results:
             # Use answer synthesis for legal queries
             synthesis_result = answer_synthesis_service.synthesize_answer(
                 final_message,
@@ -262,11 +267,6 @@ async def unified_message(
                 detected_language or "english"
             )
             final_response = synthesis_result.get("answer")
-        elif image is not None and image_analysis_text:
-            # For image queries, use vision analysis directly to avoid non-vision chat refusal text.
-            final_response = image_analysis_text
-            if not detected_language:
-                detected_language = multilingual_chat_service.detect_language(final_message)
         else:
             # Use chat for general queries with context
             if context_parts:
@@ -283,6 +283,7 @@ async def unified_message(
             image_summary_block = (
                 "## Image Summary\n"
                 f"- What this is: {image_summary_data.get('what_this_is', 'N/A')}\n"
+                f"- What it is about: {image_summary_data.get('what_it_is_about', 'N/A')}\n"
                 f"- What is mentioned: {image_summary_data.get('what_is_mentioned', 'N/A')}"
             )
             final_response = f"{image_summary_block}\n\n{final_response}"

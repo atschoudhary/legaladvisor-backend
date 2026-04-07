@@ -123,6 +123,9 @@ pip install -r requirements.txt
 Create `.env` file:
 ```env
 OPENAI_API_KEY=your_openai_api_key
+EMBEDDING_MODEL=text-embedding-3-large
+IMAGE_ANALYSIS_MODEL=gpt-4.1
+IMAGE_ANALYSIS_FALLBACK_MODEL=gpt-4o
 QDRANT_URL=your_qdrant_url
 QDRANT_API_KEY=your_qdrant_api_key
 ENVIRONMENT=development

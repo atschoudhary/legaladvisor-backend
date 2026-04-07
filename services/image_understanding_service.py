@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 class ImageUnderstandingService:
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.primary_model = "gpt-5.4"
-        self.fallback_model = "gpt-4o"
+        self.primary_model = settings.IMAGE_ANALYSIS_MODEL
+        self.fallback_model = settings.IMAGE_ANALYSIS_FALLBACK_MODEL
 
     def _create_vision_completion(self, messages, temperature: float, max_tokens: int):
         """
@@ -104,8 +104,10 @@ class ImageUnderstandingService:
                     "You analyze ONE section of a legal document image. "
                     f"Respond in {target_language}. "
                     "Never refuse. If text is unclear, mention partial visibility. "
+                    "Answer from image content only; do not invent details. "
                     "Return ONLY strict JSON (no markdown/code fences) with keys: "
-                    "section_overview (string), key_mentions (array of strings), visibility_note (string)."
+                    "section_overview (string), key_mentions (array of strings), visibility_note (string). "
+                    "section_overview must explain what this section is about in plain language, not generic placeholders."
                 )
             },
             {
@@ -116,7 +118,8 @@ class ImageUnderstandingService:
                         "text": (
                             f"Section order: {section_order} (top-to-bottom). "
                             f"User query: {user_query}. "
-                            "Summarize this section only."
+                            "Summarize this section only with focus on purpose/topic and visible legal context. "
+                            "Do not output generic lines like 'section details extracted'."
                         )
                     },
                     {
@@ -185,7 +188,11 @@ class ImageUnderstandingService:
                 break
 
         combined_overview_parts = [i.get("section_overview", "").strip() for i in ordered[:2] if i.get("section_overview")]
-        what_it_is_about = " ".join(combined_overview_parts).strip() if combined_overview_parts else doc_identity
+        combined_overview_parts = [
+            p for p in combined_overview_parts
+            if p.lower() not in {"section details extracted.", "visible legal section content.", "image overview"}
+        ]
+        what_it_is_about = " ".join(combined_overview_parts).strip() if combined_overview_parts else ""
 
         mentioned_items = []
         seen = set()
@@ -204,6 +211,9 @@ class ImageUnderstandingService:
         if not mentioned_items:
             mentioned_items = ["Visible fields and narrative legal details are present, but some parts are unclear."]
 
+        if not what_it_is_about:
+            what_it_is_about = self._infer_document_about(mentioned_items)
+
         visibility_notes = [i.get("visibility_note", "").strip() for i in ordered if i.get("visibility_note")]
         visibility_note = " ".join(visibility_notes[:2]).strip() or "Some portions may be partially unclear due to image quality."
 
@@ -219,6 +229,66 @@ class ImageUnderstandingService:
         lines.append("- Processing order: Sections were analyzed from top to bottom.")
 
         return self._sanitize_non_refusal_text("\n".join(lines))
+
+    def _is_low_quality_analysis(self, text: str) -> bool:
+        """
+        Detect generic/low-information analysis and trigger fallback.
+        """
+        if not text:
+            return True
+
+        generic_patterns = [
+            r"section\s+details\s+extracted",
+            r"visible\s+legal\s+section\s+content",
+            r"image\s+overview\s*$",
+            r"what\s+it\s+is\s+about:\s*(n/a|unknown|not\s+clear)"
+        ]
+        lowered = text.lower()
+        generic_hits = sum(1 for p in generic_patterns if re.search(p, lowered))
+        return generic_hits >= 2
+
+    def _fallback_full_image_analysis(self, image_content: bytes, user_query: str, target_language: str) -> str:
+        """
+        Full-page fallback when section summary is too generic.
+        """
+        base64_image = base64.b64encode(image_content).decode("utf-8")
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Analyze this legal document image and answer strictly from visible content. "
+                    f"Respond in {target_language}. "
+                    "Return markdown with exact headings: "
+                    "## Image Overview, - What this document is:, - What it is about:, - What is mentioned:, - Visibility note:. "
+                    "Do not refuse and do not use generic placeholders."
+                )
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"User query: {user_query}. Summarize this image."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }
+        ]
+
+        response = self._create_vision_completion(messages=messages, temperature=0.2, max_tokens=1400)
+        return self._sanitize_non_refusal_text((response.choices[0].message.content or "").strip())
+
+    def _infer_document_about(self, mentions) -> str:
+        """
+        Build a high-level 'about' sentence from visible mentions.
+        """
+        corpus = " ".join(mentions).lower()
+
+        if any(k in corpus for k in ["fir", "مقدمہ", "پولیس", "report", "complaint", "درخواست"]):
+            return "This document is about recording a legal complaint/case narrative with incident details and parties involved."
+        if any(k in corpus for k in ["court", "عدالت", "petition", "judge", "hearing"]):
+            return "This document is about court-related proceedings, including case references and legal statements."
+        if any(k in corpus for k in ["tax", "appeal", "order", "notification", "act"]):
+            return "This document is about a legal/administrative matter with formal references and procedural details."
+
+        return "This document is about a formal legal matter containing case/party details, dated entries, and narrative facts."
     
     def analyze_image(self, image_content: bytes, user_query: str, language: str = "english") -> str:
         """
@@ -250,6 +320,12 @@ class ImageUnderstandingService:
                 section_summaries.append(section_summary)
 
             answer = self._combine_ordered_section_summaries(section_summaries)
+            if self._is_low_quality_analysis(answer):
+                answer = self._fallback_full_image_analysis(
+                    image_content=image_content,
+                    user_query=user_query,
+                    target_language=target_language
+                )
             logger.info(f"Image analyzed successfully in {language}")
             return answer
             
@@ -326,6 +402,10 @@ class ImageUnderstandingService:
                 if first_line and first_line.lower() not in {"image overview", "overview"}:
                     what_this_is = first_line[:220]
 
+        what_it_is_about = self._extract_labeled_content(clean_analysis, "what it is about")
+        if not what_it_is_about:
+            what_it_is_about = self._infer_document_about([clean_analysis, clean_text])
+
         mentioned = self._extract_labeled_content(clean_analysis, "what is mentioned")
         if not mentioned:
             mentioned = "The image text is partially visible; a full transcription is not clear."
@@ -340,6 +420,7 @@ class ImageUnderstandingService:
 
         return {
             "what_this_is": what_this_is,
+            "what_it_is_about": what_it_is_about,
             "what_is_mentioned": mentioned
         }
 

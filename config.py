@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     EMBEDDING_MODEL: str = "text-embedding-3-large"
+    IMAGE_ANALYSIS_MODEL: str = "gpt-4.1"
+    IMAGE_ANALYSIS_FALLBACK_MODEL: str = "gpt-4o"
     
     # Qdrant
     QDRANT_URL: str

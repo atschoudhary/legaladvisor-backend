@@ -19,6 +19,8 @@ ENVIRONMENT=development
 # ============================================================
 OPENAI_API_KEY=your_openai_api_key_here
 EMBEDDING_MODEL=text-embedding-3-large
+IMAGE_ANALYSIS_MODEL=gpt-4.1
+IMAGE_ANALYSIS_FALLBACK_MODEL=gpt-4o
 
 # ============================================================
 # QDRANT VECTOR DATABASE
