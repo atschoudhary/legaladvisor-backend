@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+qdrant-client
+openai
+python-dotenv
+PyPDF2
+python-docx
+python-multipart

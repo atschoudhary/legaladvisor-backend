@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalAdvisor - Unified Testing</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #0f766e;
+            --primary-light: #14b8a6;
+            --surface: #f8fafc;
+            --border: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header p {
+            color: var(--text-secondary);
+        }
+        
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .card h2 {
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn:hover:not(:disabled) {
+            background: var(--primary-light);
+            transform: translateY(-1px);
+        }
+        
+        .btn:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: white;
+            border-color: var(--primary);
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: block;
+        }
+        
+        .file-input-wrapper input[type="file"] {
+            display: none;
+        }
+        
+        .file-input-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--surface);
+        }
+        
+        .file-input-label:hover {
+            border-color: var(--primary);
+            background: white;
+        }
+        
+        .file-name {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .response {
+            background: var(--surface);
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+            border: 1px solid var(--border);
+        }
+        
+        .response h3 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .response-content {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            line-height: 1.8;
+        }
+        
+        .response-content h2 {
+            font-size: 18px;
+            margin: 16px 0 8px 0;
+        }
+        
+        .response-content strong {
+            color: var(--primary);
+        }
+        
+        .response pre {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .loading {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            margin-top: 12px;
+        }
+        
+        .loading.active {
+            display: flex;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        img.preview {
+            max-width: 100%;
+            max-height: 200px;
+            margin-top: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        audio {
+            width: 100%;
+            margin-top: 12px;
+        }
+        
+        .attachments {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        
+        .attachment-badge {
+            background: var(--primary);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        @media (max-width: 768px) {
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i data-lucide="scale"></i>
+                LegalAdvisor - Unified API Testing
+            </h1>
+            <p>One endpoint for everything: text, images, documents, and voice</p>
+        </div>
+        
+        
+        <!-- Message Card -->
+        <div class="card">
+            <h2><i data-lucide="message-circle"></i> Send Message</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                <i data-lucide="sparkles" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+                System automatically detects legal queries and selects appropriate search
+            </p>
+            
+            <div class="form-group">
+                <label>Message</label>
+                <textarea id="message" placeholder="Type your message in any language...">What are fundamental rights in Pakistan?</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Image (Optional)</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="imageFile" accept="image/*" onchange="previewFile('imageFile', 'imagePreview')">
+                    <label for="imageFile" class="file-input-label">
+                        <i data-lucide="image"></i>
+                        <span class="file-name" id="imageFileName">Choose an image...</span>
+                    </label>
+                </div>
+                <img id="imagePreview" class="preview" style="display: none;">
+            </div>
+            
+            <div class="form-group">
+                <label>Document (Optional)</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="documentFile" accept=".pdf,.docx,.txt" onchange="updateFileName('documentFile', 'documentFileName')">
+                    <label for="documentFile" class="file-input-label">
+                        <i data-lucide="file-text"></i>
+                        <span class="file-name" id="documentFileName">Choose a document...</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Audio (Optional)</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="audioFile" accept="audio/*" onchange="updateFileName('audioFile', 'audioFileName')">
+                    <label for="audioFile" class="file-input-label">
+                        <i data-lucide="mic"></i>
+                        <span class="file-name" id="audioFileName">Choose an audio file...</span>
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn" onclick="sendMessage()" id="sendBtn">
+                <i data-lucide="send"></i>
+                Send Message
+            </button>
+            <button class="btn btn-secondary" onclick="clearAll()" style="margin-left: 8px;">
+                <i data-lucide="x"></i>
+                Clear All
+            </button>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <span>Processing...</span>
+            </div>
+            
+            <div id="response"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        // Initialize Lucide icons on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+        
+        // File preview
+        function previewFile(inputId, previewId) {
+            const input = document.getElementById(inputId);
+            const preview = document.getElementById(previewId);
+            const fileName = inputId + 'Name';
+            
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(input.files[0]);
+                updateFileName(inputId, fileName);
+            }
+        }
+        
+        // Update file name
+        function updateFileName(inputId, displayId) {
+            const input = document.getElementById(inputId);
+            const display = document.getElementById(displayId);
+            if (input.files.length > 0) {
+                display.textContent = input.files[0].name;
+            }
+        }
+        
+        // Markdown rendering
+        function renderMarkdown(text) {
+            let html = text;
+            html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+            html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+            html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            html = html.replace(/^- (.+)$/gim, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = html.replace(/\n/g, '<br>');
+            if (!html.startsWith('<')) {
+                html = '<p>' + html + '</p>';
+            }
+            return html;
+        }
+        
+        // Send message
+        async function sendMessage() {
+            const message = document.getElementById('message').value;
+            const imageFile = document.getElementById('imageFile').files[0];
+            const documentFile = document.getElementById('documentFile').files[0];
+            const audioFile = document.getElementById('audioFile').files[0];
+            
+            if (!message && !audioFile) {
+                alert('Please enter a message or upload an audio file');
+                return;
+            }
+            
+            const btn = document.getElementById('sendBtn');
+            const loading = document.getElementById('loading');
+            const responseDiv = document.getElementById('response');
+            
+            btn.disabled = true;
+            loading.classList.add('active');
+            responseDiv.innerHTML = '';
+            
+            try {
+                const formData = new FormData();
+                formData.append('message', message);
+                
+                // Add files if present
+                if (imageFile) formData.append('image', imageFile);
+                if (documentFile) formData.append('document', documentFile);
+                if (audioFile) formData.append('audio', audioFile);
+                
+                const response = await fetch(`${API_BASE}/message`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `
+                        <div class="response">
+                            <h3>Response</h3>
+                            <div class="response-content">${renderMarkdown(data.response)}</div>
+                        </div>
+                    `;
+                    
+                    // Show context info
+                    if (data.context) {
+                        const attachments = [];
+                        if (data.context.had_audio) attachments.push('<span class="attachment-badge"><i data-lucide="mic" style="width: 14px; height: 14px;"></i> Audio</span>');
+                        if (data.context.had_image) attachments.push('<span class="attachment-badge"><i data-lucide="image" style="width: 14px; height: 14px;"></i> Image</span>');
+                        if (data.context.had_document) attachments.push('<span class="attachment-badge"><i data-lucide="file-text" style="width: 14px; height: 14px;"></i> Document</span>');
+                        if (data.context.used_legal_search) attachments.push('<span class="attachment-badge"><i data-lucide="book-open" style="width: 14px; height: 14px;"></i> Legal Search (Auto-detected)</span>');
+                        
+                        if (attachments.length > 0) {
+                            html += `
+                                <div class="response">
+                                    <h3>Context Used</h3>
+                                    <div class="attachments">${attachments.join('')}</div>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    // Show audio if TTS enabled
+                    if (data.audio) {
+                        const audioBlob = base64ToBlob(data.audio, 'audio/mpeg');
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        html += `
+                            <div class="response">
+                                <h3>Audio Response</h3>
+                                <audio controls src="${audioUrl}"></audio>
+                            </div>
+                        `;
+                    }
+                    
+                    // Show raw response
+                    html += `
+                        <div class="response">
+                            <h3>API Response</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                    
+                    responseDiv.innerHTML = html;
+                    lucide.createIcons();
+                } else {
+                    responseDiv.innerHTML = `
+                        <div class="response">
+                            <h3>Error</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                responseDiv.innerHTML = `
+                    <div class="response">
+                        <h3>Error</h3>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('active');
+            }
+        }
+        
+        // Clear all
+        function clearAll() {
+            document.getElementById('message').value = '';
+            document.getElementById('imageFile').value = '';
+            document.getElementById('documentFile').value = '';
+            document.getElementById('audioFile').value = '';
+            document.getElementById('imageFileName').textContent = 'Choose an image...';
+            document.getElementById('documentFileName').textContent = 'Choose a document...';
+            document.getElementById('audioFileName').textContent = 'Choose an audio file...';
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('response').innerHTML = '';
+        }
+        
+        // Base64 to Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+    </script>
+</body>
+</html>
