@@ -3,6 +3,7 @@ from typing import List, Dict, Optional
 from config import settings
 import logging
 from datetime import datetime, timezone
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ Don't use web search (no) if query is about:
         """
         try:
             logger.info(f"Performing web search for: {query}")
+            current_year = datetime.now(timezone.utc).year
 
             # Use OpenAI's web search tool for fresh, web-grounded results.
             response = self.client.responses.create(
@@ -83,6 +85,7 @@ Don't use web search (no) if query is about:
                 input=(
                     "You are a legal research assistant focused on Pakistani law. "
                     "Search the web and provide concise, factual findings with source-backed details. "
+                    f"Prioritize latest implemented laws and policies for {current_year}. "
                     f"Return {max_results} most relevant and recent findings for: {query}"
                 )
             )
@@ -149,15 +152,18 @@ Don't use web search (no) if query is about:
 
         retrieved_at = datetime.now(timezone.utc).isoformat()
         citations = self._extract_url_citations(raw_response)
+        sections = [s.strip() for s in content.split("\n\n") if s.strip()] if content else []
 
         if citations:
             for idx, citation in enumerate(citations[:max_results], 1):
                 source_url = citation.get("url") or ""
                 source_title = citation.get("title") or "Web Search Result"
                 published_date = citation.get("published_date") or citation.get("date")
+                summary = self._build_summary(source_title, sections[idx - 1] if len(sections) >= idx else content)
 
                 results.append({
                     "text": content.strip() if content else source_title,
+                    "summary": summary,
                     "score": max(0.7, 0.98 - (idx * 0.08)),
                     "source": source_title,
                     "source_url": source_url,
@@ -173,10 +179,10 @@ Don't use web search (no) if query is about:
 
         # Fallback when citations are unavailable: still preserve latest retrieval timestamp.
         if content and content.strip():
-            sections = [s.strip() for s in content.split("\n\n") if s.strip()]
             for idx, section in enumerate(sections[:max_results], 1):
                 results.append({
                     "text": section,
+                    "summary": self._build_summary("Web Search Result", section),
                     "score": max(0.7, 0.95 - (idx * 0.05)),
                     "source": "Web Search Result",
                     "source_url": None,
@@ -190,6 +196,22 @@ Don't use web search (no) if query is about:
                 })
         
         return results
+
+    def _build_summary(self, source_title: str, raw_text: Optional[str]) -> str:
+        """
+        Build a short readable description for latest updates list.
+        """
+        if not raw_text:
+            return f"Update related to {source_title}."
+
+        text = re.sub(r"\s+", " ", raw_text).strip()
+        text = text.replace("[", "").replace("]", "")
+
+        sentence_match = re.search(r"(.{40,220}?[.!?])", text)
+        if sentence_match:
+            return sentence_match.group(1).strip()
+
+        return (text[:220] + "...") if len(text) > 220 else text
     
     def enhance_results_with_web(
         self,

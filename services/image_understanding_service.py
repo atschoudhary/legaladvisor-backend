@@ -8,6 +8,28 @@ logger = logging.getLogger(__name__)
 class ImageUnderstandingService:
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.primary_model = "gpt-5.4"
+        self.fallback_model = "gpt-4o"
+
+    def _create_vision_completion(self, messages, temperature: float, max_tokens: int):
+        """
+        Try primary vision model first, then fallback for compatibility.
+        """
+        try:
+            return self.client.chat.completions.create(
+                model=self.primary_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+        except Exception as primary_error:
+            logger.warning(f"Primary image model failed ({self.primary_model}): {primary_error}. Falling back to {self.fallback_model}")
+            return self.client.chat.completions.create(
+                model=self.fallback_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
     
     def analyze_image(self, image_content: bytes, user_query: str, language: str = "english") -> str:
         """
@@ -27,9 +49,7 @@ class ImageUnderstandingService:
             
             target_language = language_names.get(language, "English")
             
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
+            messages = [
                     {
                         "role": "system",
                         "content": f"""You are an AI assistant that analyzes images and provides guidance.
@@ -65,7 +85,10 @@ MARKDOWN FORMATTING:
                             }
                         ]
                     }
-                ],
+                ]
+
+            response = self._create_vision_completion(
+                messages=messages,
                 temperature=0.3,
                 max_tokens=2000
             )
@@ -85,9 +108,7 @@ MARKDOWN FORMATTING:
         try:
             base64_image = base64.b64encode(image_content).decode('utf-8')
             
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
+            messages = [
                     {
                         "role": "system",
                         "content": "Extract all text from this image. Provide only the extracted text, maintaining the original structure and formatting as much as possible."
@@ -107,7 +128,10 @@ MARKDOWN FORMATTING:
                             }
                         ]
                     }
-                ],
+                ]
+
+            response = self._create_vision_completion(
+                messages=messages,
                 temperature=0.1,
                 max_tokens=2000
             )
@@ -119,5 +143,29 @@ MARKDOWN FORMATTING:
         except Exception as e:
             logger.error(f"Text extraction from image failed: {e}")
             raise Exception(f"Failed to extract text from image: {str(e)}")
+
+    def build_image_summary(self, image_analysis: str, extracted_text: str) -> Dict[str, str]:
+        """
+        Build a compact image summary for final response.
+        """
+        clean_analysis = (image_analysis or "").replace("#", "").strip()
+        clean_text = (extracted_text or "").strip()
+
+        what_this_is = "Image provided by user."
+        if clean_analysis:
+            first_line = next((line.strip("- * ").strip() for line in clean_analysis.splitlines() if line.strip()), "")
+            if first_line:
+                what_this_is = first_line[:220]
+
+        mentioned = "No clear extracted text found."
+        if clean_text:
+            lines = [line.strip() for line in clean_text.splitlines() if line.strip()]
+            preview = " | ".join(lines[:3])
+            mentioned = (preview[:300] + "...") if len(preview) > 300 else preview
+
+        return {
+            "what_this_is": what_this_is,
+            "what_is_mentioned": mentioned
+        }
 
 image_understanding_service = ImageUnderstandingService()

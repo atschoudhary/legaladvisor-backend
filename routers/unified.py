@@ -129,6 +129,7 @@ async def unified_message(
         context_parts = []
         final_message = message
         detected_language = None
+        image_summary_data = None
         
         # 1. Process Audio (if provided) - transcribe and use as message
         if audio:
@@ -154,6 +155,8 @@ async def unified_message(
         if image:
             logger.info(f"Processing image: {image.filename}")
             image_content = await image.read()
+            image_text = ""
+            image_analysis = ""
             
             # Extract text from image if it contains text
             try:
@@ -170,6 +173,11 @@ async def unified_message(
                 detected_language or "english"
             )
             context_parts.append(f"[Image analysis: {image_analysis}]")
+
+            image_summary_data = image_understanding_service.build_image_summary(
+                image_analysis=image_analysis,
+                extracted_text=image_text
+            )
         
         # 3. Process Document (if provided)
         if document:
@@ -261,6 +269,14 @@ async def unified_message(
             final_response = chat_result["response"]
             if not detected_language:
                 detected_language = chat_result["language"]
+
+        if image_summary_data:
+            image_summary_block = (
+                "## Image Summary\n"
+                f"- What this is: {image_summary_data.get('what_this_is', 'N/A')}\n"
+                f"- What is mentioned: {image_summary_data.get('what_is_mentioned', 'N/A')}"
+            )
+            final_response = f"{image_summary_block}\n\n{final_response}"
         
         # 6. Generate TTS Audio (if enabled)
         audio_base64 = None
@@ -290,6 +306,9 @@ async def unified_message(
                 "auto_detected": True  # Indicates automatic detection
             }
         }
+
+        if image_summary_data:
+            response_data["context"]["image_summary"] = image_summary_data
         
         # Add audio if TTS was enabled
         if audio_base64:

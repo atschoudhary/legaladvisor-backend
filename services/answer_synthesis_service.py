@@ -3,6 +3,7 @@ from typing import List, Dict
 from config import settings
 import logging
 import re
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ CRITICAL RULES:
 7. Use markdown formatting for better readability
 
 ANSWER STRUCTURE (use markdown):
-1. **Direct Answer**: Start with a clear, direct answer to the question
+1. **Summary**: Start with a clear summary to the question
 2. **Latest Legal Position**: Prioritize the most recent legal developments first
 3. **Legal Basis**: Explain the relevant laws, acts, or provisions
 4. **Key Points**: Break down important details using bullet points
@@ -49,6 +50,8 @@ MARKDOWN FORMATTING:
 IMPORTANT:
 - When web data exists, include concise source attribution (name/date/link if available)
 - Do not repeat sections or headings in the final answer
+- Do not use the heading or phrase "Direct Answer"
+- If the query asks for "this year" or current-year updates and no verified current-year implementations are present, explicitly say no implemented laws were verified for the current year in retrieved sources
 - If results contradict each other, mention both perspectives without citing sources
 - If results are from different provinces, clarify jurisdictional differences
 - If information is outdated or unclear, mention this
@@ -103,10 +106,15 @@ Please provide a comprehensive, well-structured answer to this legal query based
             
             answer = response.choices[0].message.content
 
-            web_updates = self._format_latest_web_updates(results)
+            web_updates = self._format_latest_web_updates(query, results)
             if web_updates:
                 answer = self._remove_latest_web_updates_section(answer)
+                answer = self._remove_direct_answer_heading(answer)
                 answer = f"{web_updates}\n\n{answer.strip()}"
+            else:
+                answer = self._remove_direct_answer_heading(answer)
+
+            answer = self._linkify_main_body_web_references(answer, results)
             
             logger.info(f"Generated answer for query in {detected_language}")
             
@@ -149,7 +157,7 @@ Content: {text}
         
         return "\n".join(context_parts)
 
-    def _format_latest_web_updates(self, results: List[Dict]) -> str:
+    def _format_latest_web_updates(self, query: str, results: List[Dict]) -> str:
         """
         Build a deterministic latest-data section from web results.
         """
@@ -157,15 +165,114 @@ Content: {text}
         if not web_results:
             return ""
 
-        lines = ["## Latest Web Updates", "- Priority: The latest verified web information is listed first."]
-        for result in web_results[:3]:
+        current_year = datetime.now(timezone.utc).year
+        this_year_query = self._is_this_year_query(query)
+        latest_query = self._is_latest_query(query)
+        prioritize_current_year = this_year_query or latest_query
+        selected_results = web_results
+
+        if prioritize_current_year:
+            selected_results = [
+                r for r in web_results
+                if self._extract_year_from_result(r) == current_year
+            ]
+
+        lines = [
+            "## Latest Web Updates",
+            "- Priority: The latest verified legal implementations are listed first.",
+            f"- Target Year: {current_year}"
+        ]
+
+        if prioritize_current_year and not selected_results:
+            lines.append(f"- No verified newly implemented laws were found for {current_year} in the retrieved web sources.")
+            return "\n".join(lines)
+
+        for result in selected_results[:3]:
             source = result.get("source", "Web Search Result")
             published_date = result.get("published_date") or "Unknown publish date"
             retrieved_at = result.get("retrieved_at") or "Unknown retrieval time"
             source_url = result.get("source_url") or "No URL available"
-            lines.append(f"- {source} | Published: {published_date} | Retrieved: {retrieved_at} | {source_url}")
+            summary = self._build_latest_item_description(result)
+
+            if source_url and source_url != "No URL available":
+                source_label = f"[{source}]({source_url})"
+            else:
+                source_label = source
+
+            lines.append(f"- {source_label} | Published: {published_date} | Retrieved: {retrieved_at}")
+            lines.append(f"  Summary: {summary}")
 
         return "\n".join(lines)
+
+    def _is_latest_query(self, query: str) -> bool:
+        """
+        Detect if user asks for latest/recent implementations.
+        """
+        if not query:
+            return False
+
+        q = query.lower()
+        patterns = [
+            r"\blatest\b",
+            r"\brecent\b",
+            r"\bnew\b",
+            r"\bnewly\s+implemented\b",
+            r"\bimplemented\s+this\s+year\b"
+        ]
+        return any(re.search(p, q) for p in patterns)
+
+    def _is_this_year_query(self, query: str) -> bool:
+        """
+        Detect if user asks specifically for current-year updates.
+        """
+        if not query:
+            return False
+
+        q = query.lower()
+        patterns = [
+            r"\bthis\s+year\b",
+            r"\bcurrent\s+year\b",
+            r"\biss\s+saal\b",
+            r"\bis\s+saal\b",
+            r"\bاس\s+سال\b"
+        ]
+        return any(re.search(p, q) for p in patterns)
+
+    def _extract_year_from_result(self, result: Dict) -> int:
+        """
+        Infer a year from published date, URL, or text when available.
+        """
+        candidate_fields = [
+            str(result.get("published_date") or ""),
+            str(result.get("source_url") or ""),
+            str(result.get("text") or "")[:500]
+        ]
+
+        for field in candidate_fields:
+            match = re.search(r"\b(20\d{2})\b", field)
+            if match:
+                return int(match.group(1))
+
+        return 0
+
+    def _build_latest_item_description(self, result: Dict) -> str:
+        """
+        Build a concise one-line summary for each latest web item.
+        """
+        summary = str(result.get("summary") or "").strip()
+        if summary:
+            return summary
+
+        text = str(result.get("text") or "")
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return "No additional source description available."
+
+        sentence_match = re.search(r"(.{40,220}?[.!?])", text)
+        if sentence_match:
+            return sentence_match.group(1).strip()
+
+        return (text[:220] + "...") if len(text) > 220 else text
 
     def _remove_latest_web_updates_section(self, answer: str) -> str:
         """
@@ -188,6 +295,56 @@ Content: {text}
 
         cleaned = "\n".join(lines[:start_idx]).strip()
         return cleaned or answer.strip()
+
+    def _remove_direct_answer_heading(self, answer: str) -> str:
+        """
+        Remove model heading variants like 'Direct Answer'.
+        """
+        if not answer:
+            return ""
+
+        patterns = [
+            r"^\s*#{0,3}\s*direct\s+answer\s*\n+",
+            r"^\s*\*\*\s*direct\s+answer\s*\*\*\s*\n+",
+            r"^\s*direct\s+answer\s*\n+",
+            r"(?im)^\s*#{1,3}\s*direct\s+answer\s*$",
+            r"(?im)^\s*direct\s+answer\s*$"
+        ]
+
+        cleaned = answer
+        for pattern in patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+        return cleaned.strip()
+
+    def _linkify_main_body_web_references(self, answer: str, results: List[Dict]) -> str:
+        """
+        Convert web references in the answer body to clickable markdown links.
+        """
+        if not answer:
+            return ""
+
+        linked = answer
+
+        for result in [r for r in results if r.get("is_web_result") and r.get("source_url")]:
+            source = str(result.get("source") or "").strip()
+            source_url = str(result.get("source_url") or "").strip()
+            if not source or not source_url:
+                continue
+
+            markdown_link = f"[{source}]({source_url})"
+            if markdown_link in linked:
+                continue
+            linked = re.sub(rf"\b{re.escape(source)}\b", markdown_link, linked)
+
+        # Linkify bare URLs that are not already part of markdown links.
+        linked = re.sub(
+            r"(?<!\()(?P<url>https?://[^\s)]+)",
+            lambda m: f"[{m.group('url')}]({m.group('url')})",
+            linked
+        )
+
+        return linked
     
     def _get_no_results_message(self, language: str) -> str:
         """
