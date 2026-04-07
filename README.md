@@ -134,47 +134,47 @@ cd backend
 uvicorn main:app --reload
 ```
 
-Server will be available at `http://localhost:8000`
+Server will be available at `http://localhost:8080`
 
 ## API Documentation
 
 Interactive documentation:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Testing UI**: http://localhost:8000
+- **Swagger UI**: http://localhost:8080/docs
+- **ReDoc**: http://localhost:8080/redoc
+- **Testing UI**: http://localhost:8080
 
 ## Usage Examples
 
 ### Simple Text Query
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What are fundamental rights in Pakistan?"
 ```
 
 ### Query with Image
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What is in this image?" \
   -F "image=@photo.jpg"
 ```
 
 ### Document Analysis
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=Summarize this document" \
   -F "document=@contract.pdf"
 ```
 
 ### Voice Query
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=" \
   -F "audio=@recording.mp3"
 ```
 
 ### Update Settings
 ```bash
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"use_legal_search": true, "province": "punjab"}'
 ```
@@ -256,4 +256,4 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## Testing
 
-Use the web interface at `http://localhost:8000` to test all features before mobile implementation.
+Use the web interface at `http://localhost:8080` to test all features before mobile implementation.

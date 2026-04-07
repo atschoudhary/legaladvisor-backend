@@ -4,7 +4,7 @@ Complete examples for the unified API endpoint.
 
 ## Base URL
 ```
-http://localhost:8000/api/v1
+http://localhost:8080/api/v1
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ The API has just 3 main endpoints:
 
 ### Get Current Settings
 ```bash
-curl http://localhost:8000/api/v1/settings
+curl http://localhost:8080/api/v1/settings
 ```
 
 **Response:**
@@ -38,7 +38,7 @@ curl http://localhost:8000/api/v1/settings
 
 ### Update Settings
 ```bash
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{
     "use_legal_search": true,
@@ -59,7 +59,7 @@ $settings = @{
     tts_enabled = $false
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/settings" `
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/settings" `
   -Method Post `
   -Body $settings `
   -ContentType "application/json"
@@ -69,40 +69,40 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/settings" `
 
 ### Simple Text Message
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What are fundamental rights in Pakistan?"
 ```
 
 ### Text Message in Urdu
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=پاکستان میں بنیادی حقوق کیا ہیں؟"
 ```
 
 ### Message with Image
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What is in this image?" \
   -F "image=@photo.jpg"
 ```
 
 ### Message with Document
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=Summarize this legal document" \
   -F "document=@contract.pdf"
 ```
 
 ### Voice Message (Audio Only)
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=" \
   -F "audio=@recording.mp3"
 ```
 
 ### Combined: Text + Image + Document
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=Analyze this contract and the attached image" \
   -F "image=@signature.jpg" \
   -F "document=@contract.pdf"
@@ -111,14 +111,14 @@ curl -X POST http://localhost:8000/api/v1/message \
 ### With Legal Search Enabled
 First enable legal search:
 ```bash
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"use_legal_search": true, "province": "punjab"}'
 ```
 
 Then send message:
 ```bash
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What are the arrest procedures in Punjab?"
 ```
 
@@ -130,7 +130,7 @@ $form = @{
     message = "What is property law in Pakistan?"
 }
 
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/message" `
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/message" `
   -Method Post `
   -Form $form
 ```
@@ -142,7 +142,7 @@ $form = @{
     image = Get-Item -Path "photo.jpg"
 }
 
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/message" `
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/message" `
   -Method Post `
   -Form $form
 ```
@@ -154,7 +154,7 @@ $form = @{
     document = Get-Item -Path "contract.pdf"
 }
 
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/message" `
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/message" `
   -Method Post `
   -Form $form
 ```
@@ -166,7 +166,7 @@ $form = @{
     audio = Get-Item -Path "recording.mp3"
 }
 
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/message" `
+Invoke-RestMethod -Uri "http://localhost:8080/api/v1/message" `
   -Method Post `
   -Form $form
 ```
@@ -178,7 +178,7 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/message" `
 import requests
 
 response = requests.post(
-    "http://localhost:8000/api/v1/message",
+    "http://localhost:8080/api/v1/message",
     data={"message": "What are fundamental rights?"}
 )
 print(response.json())
@@ -190,7 +190,7 @@ import requests
 
 with open("photo.jpg", "rb") as img:
     response = requests.post(
-        "http://localhost:8000/api/v1/message",
+        "http://localhost:8080/api/v1/message",
         data={"message": "What is in this image?"},
         files={"image": img}
     )
@@ -203,7 +203,7 @@ import requests
 
 with open("contract.pdf", "rb") as doc:
     response = requests.post(
-        "http://localhost:8000/api/v1/message",
+        "http://localhost:8080/api/v1/message",
         data={"message": "Summarize this document"},
         files={"document": doc}
     )
@@ -216,7 +216,7 @@ import requests
 
 with open("recording.mp3", "rb") as audio:
     response = requests.post(
-        "http://localhost:8000/api/v1/message",
+        "http://localhost:8080/api/v1/message",
         data={"message": ""},
         files={"audio": audio}
     )
@@ -229,7 +229,7 @@ import requests
 
 with open("photo.jpg", "rb") as img, open("contract.pdf", "rb") as doc:
     response = requests.post(
-        "http://localhost:8000/api/v1/message",
+        "http://localhost:8080/api/v1/message",
         data={"message": "Analyze both files"},
         files={
             "image": img,
@@ -252,7 +252,7 @@ settings = {
 }
 
 response = requests.post(
-    "http://localhost:8000/api/v1/settings",
+    "http://localhost:8080/api/v1/settings",
     json=settings
 )
 print(response.json())
@@ -265,7 +265,7 @@ print(response.json())
 const formData = new FormData();
 formData.append('message', 'What are fundamental rights?');
 
-fetch('http://localhost:8000/api/v1/message', {
+fetch('http://localhost:8080/api/v1/message', {
     method: 'POST',
     body: formData
 })
@@ -279,7 +279,7 @@ const formData = new FormData();
 formData.append('message', 'What is in this image?');
 formData.append('image', imageFile); // File from input
 
-fetch('http://localhost:8000/api/v1/message', {
+fetch('http://localhost:8080/api/v1/message', {
     method: 'POST',
     body: formData
 })
@@ -297,7 +297,7 @@ const settings = {
     tts_enabled: false
 };
 
-fetch('http://localhost:8000/api/v1/settings', {
+fetch('http://localhost:8080/api/v1/settings', {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json'
@@ -375,24 +375,24 @@ fetch('http://localhost:8000/api/v1/settings', {
 ### Use Case 1: Simple Legal Query
 ```bash
 # 1. Enable legal search
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"use_legal_search": true}'
 
 # 2. Send query
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=What is the legal age for marriage?"
 ```
 
 ### Use Case 2: Document Analysis with Legal Context
 ```bash
 # 1. Enable legal search
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"use_legal_search": true, "province": "sindh"}'
 
 # 2. Analyze document
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=Is this contract legally valid in Sindh?" \
   -F "document=@contract.pdf"
 ```
@@ -400,12 +400,12 @@ curl -X POST http://localhost:8000/api/v1/message \
 ### Use Case 3: Voice Query with TTS Response
 ```bash
 # 1. Enable TTS
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"tts_enabled": true, "voice": "nova"}'
 
 # 2. Send voice query
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "audio=@question.mp3" \
   -o response.json
 
@@ -416,12 +416,12 @@ curl -X POST http://localhost:8000/api/v1/message \
 ### Use Case 4: Image OCR + Legal Search
 ```bash
 # 1. Enable legal search
-curl -X POST http://localhost:8000/api/v1/settings \
+curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"use_legal_search": true}'
 
 # 2. Send image of legal document
-curl -X POST http://localhost:8000/api/v1/message \
+curl -X POST http://localhost:8080/api/v1/message \
   -F "message=Extract and explain the legal text in this image" \
   -F "image=@legal_doc_photo.jpg"
 ```
@@ -430,25 +430,25 @@ curl -X POST http://localhost:8000/api/v1/message \
 
 1. **Start with settings**:
    ```bash
-   curl http://localhost:8000/api/v1/settings
+   curl http://localhost:8080/api/v1/settings
    ```
 
 2. **Configure as needed**:
    ```bash
-   curl -X POST http://localhost:8000/api/v1/settings \
+   curl -X POST http://localhost:8080/api/v1/settings \
      -H "Content-Type: application/json" \
      -d '{"use_legal_search": true, "province": "punjab"}'
    ```
 
 3. **Send messages**:
    ```bash
-   curl -X POST http://localhost:8000/api/v1/message \
+   curl -X POST http://localhost:8080/api/v1/message \
      -F "message=Your question here"
    ```
 
 4. **Test with files**:
    ```bash
-   curl -X POST http://localhost:8000/api/v1/message \
+   curl -X POST http://localhost:8080/api/v1/message \
      -F "message=Analyze this" \
      -F "image=@file.jpg"
    ```

@@ -28,6 +28,12 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(unified.router, prefix="/api/v1", tags=["unified"])
 
+# Leapcell healthcheck endpoint
+@app.get("/kaithhealthcheck")
+async def leapcell_healthcheck():
+    """Leapcell platform healthcheck"""
+    return {"status": "ok"}
+
 # Serve test UI at root
 @app.get("/")
 async def root():
@@ -47,14 +53,10 @@ async def startup_event():
     logger.info("Available Endpoints:")
     logger.info("  - POST /api/v1/message  - Send message with optional preferences")
     logger.info("  - GET  /api/v1/health   - Health check")
+    logger.info("  - GET  /kaithhealthcheck - Leapcell healthcheck")
     logger.info("")
-    logger.info("Web UI: http://localhost:8000")
-    logger.info("API Docs: http://localhost:8000/docs")
-    logger.info("=" * 60)
-    logger.info("  - GET  /api/v1/health         - Health check")
-    logger.info("")
-    logger.info("Web UI: http://localhost:8000")
-    logger.info("API Docs: http://localhost:8000/docs")
+    logger.info("Web UI: http://localhost:8080")
+    logger.info("API Docs: http://localhost:8080/docs")
     logger.info("=" * 60)
 
 @app.on_event("shutdown")

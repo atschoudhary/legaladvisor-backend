@@ -371,7 +371,14 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000/api/v1';
+        // Determine API base URL based on environment
+        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        const API_BASE = isProduction 
+            ? 'https://legaladvisor-backend-ats1563-fcq5tdhe.leapcell.dev/api/v1'
+            : 'http://localhost:8080/api/v1';
+        
+        console.log('Environment:', isProduction ? 'Production' : 'Development');
+        console.log('API Base URL:', API_BASE);
         
         // Initialize Lucide icons on page load
         window.addEventListener('DOMContentLoaded', () => {
