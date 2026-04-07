@@ -2,6 +2,7 @@ from openai import OpenAI
 from typing import List, Dict, Optional
 from config import settings
 import logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -70,40 +71,27 @@ Don't use web search (no) if query is about:
     
     def search_legal_web(self, query: str, max_results: int = 3) -> List[Dict]:
         """
-        Perform web search for legal information using OpenAI
+        Perform web search for legal information using OpenAI web search tool
         """
         try:
             logger.info(f"Performing web search for: {query}")
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a legal research assistant. Search the web for relevant legal information about Pakistan law.
 
-Focus on:
-- Official government sources
-- Court decisions and case law
-- Legal databases and repositories
-- Reputable legal news sources
-- Official gazette notifications
-
-Provide accurate, factual information with sources."""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Search for legal information about: {query}\n\nProvide {max_results} most relevant findings with sources."
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=1500
+            # Use OpenAI's web search tool for fresh, web-grounded results.
+            response = self.client.responses.create(
+                model="gpt-4.1-mini",
+                tools=[{"type": "web_search_preview"}],
+                input=(
+                    "You are a legal research assistant focused on Pakistani law. "
+                    "Search the web and provide concise, factual findings with source-backed details. "
+                    f"Return {max_results} most relevant and recent findings for: {query}"
+                )
             )
-            
-            content = response.choices[0].message.content
-            
-            # Parse the response into structured results
-            web_results = self._parse_web_results(content, query)
+
+            raw_response = response.model_dump() if hasattr(response, "model_dump") else response
+            content = getattr(response, "output_text", None) or self._extract_output_text(raw_response)
+
+            # Parse response + citations into structured results.
+            web_results = self._parse_web_results(content, raw_response, max_results)
             
             logger.info(f"Found {len(web_results)} web search results")
             return web_results
@@ -112,21 +100,88 @@ Provide accurate, factual information with sources."""
             logger.error(f"Web search failed: {e}")
             return []
     
-    def _parse_web_results(self, content: str, query: str) -> List[Dict]:
+    def _extract_output_text(self, raw_response: Dict) -> str:
+        """
+        Extract output text from a Responses API payload.
+        """
+        if not isinstance(raw_response, dict):
+            return ""
+
+        output_items = raw_response.get("output", [])
+        text_parts = []
+
+        for item in output_items:
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content", []):
+                if content.get("type") == "output_text" and content.get("text"):
+                    text_parts.append(content["text"])
+
+        return "\n\n".join(text_parts).strip()
+
+    def _extract_url_citations(self, raw_response: Dict) -> List[Dict]:
+        """
+        Extract URL citations from a Responses API payload.
+        """
+        citations = []
+
+        if not isinstance(raw_response, dict):
+            return citations
+
+        output_items = raw_response.get("output", [])
+        for item in output_items:
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content", []):
+                if content.get("type") != "output_text":
+                    continue
+                for annotation in content.get("annotations", []):
+                    if annotation.get("type") in {"url_citation", "web_citation"}:
+                        citations.append(annotation)
+
+        return citations
+
+    def _parse_web_results(self, content: str, raw_response: Dict, max_results: int) -> List[Dict]:
         """
         Parse web search results into structured format
         """
         results = []
-        
-        # Split content into sections (simple parsing)
-        sections = content.split('\n\n')
-        
-        for idx, section in enumerate(sections[:3], 1):
-            if section.strip():
+
+        retrieved_at = datetime.now(timezone.utc).isoformat()
+        citations = self._extract_url_citations(raw_response)
+
+        if citations:
+            for idx, citation in enumerate(citations[:max_results], 1):
+                source_url = citation.get("url") or ""
+                source_title = citation.get("title") or "Web Search Result"
+                published_date = citation.get("published_date") or citation.get("date")
+
                 results.append({
-                    "text": section.strip(),
-                    "score": 0.95 - (idx * 0.05),  # Simulated relevance score
+                    "text": content.strip() if content else source_title,
+                    "score": max(0.7, 0.98 - (idx * 0.08)),
+                    "source": source_title,
+                    "source_url": source_url,
+                    "published_date": published_date,
+                    "retrieved_at": retrieved_at,
+                    "language": "english",
+                    "chunk_index": idx,
+                    "file_type": "web",
+                    "province": "web_search",
+                    "is_web_result": True
+                })
+            return results
+
+        # Fallback when citations are unavailable: still preserve latest retrieval timestamp.
+        if content and content.strip():
+            sections = [s.strip() for s in content.split("\n\n") if s.strip()]
+            for idx, section in enumerate(sections[:max_results], 1):
+                results.append({
+                    "text": section,
+                    "score": max(0.7, 0.95 - (idx * 0.05)),
                     "source": "Web Search Result",
+                    "source_url": None,
+                    "published_date": None,
+                    "retrieved_at": retrieved_at,
                     "language": "english",
                     "chunk_index": idx,
                     "file_type": "web",

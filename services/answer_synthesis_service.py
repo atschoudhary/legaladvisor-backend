@@ -17,7 +17,7 @@ CRITICAL RULES:
 1. ONLY use information from the provided search results
 2. DO NOT make up or infer legal information not present in the results
 3. If results are insufficient, clearly state what information is missing
-4. DO NOT include source citations or references in your answer
+4. If web search results are present, include a short "Latest Web Updates" section
 5. Maintain professional legal language appropriate for the query language
 6. Structure your answer clearly with sections when appropriate
 7. Use markdown formatting for better readability
@@ -45,7 +45,7 @@ MARKDOWN FORMATTING:
 - Use > for important quotes or legal provisions
 
 IMPORTANT:
-- DO NOT include [Source: ...] citations in your answer
+- When web data exists, include concise source attribution (name/date/link if available)
 - If results contradict each other, mention both perspectives without citing sources
 - If results are from different provinces, clarify jurisdictional differences
 - If information is outdated or unclear, mention this
@@ -99,6 +99,10 @@ Please provide a comprehensive, well-structured answer to this legal query based
             )
             
             answer = response.choices[0].message.content
+
+            web_updates = self._format_latest_web_updates(results)
+            if web_updates:
+                answer = f"{answer}\n\n{web_updates}"
             
             logger.info(f"Generated answer for query in {detected_language}")
             
@@ -125,15 +129,39 @@ Please provide a comprehensive, well-structured answer to this legal query based
             source_type = "Web Search" if result.get("is_web_result") else result.get("source", "Unknown")
             province = result.get("province", "N/A")
             text = result.get("text", "")
+            source_url = result.get("source_url") or "N/A"
+            published_date = result.get("published_date") or "N/A"
+            retrieved_at = result.get("retrieved_at") or "N/A"
             
             context_parts.append(f"""
 [Result {idx}]
 Source: {source_type}
 Province: {province}
+URL: {source_url}
+Published Date: {published_date}
+Retrieved At: {retrieved_at}
 Content: {text}
 ---""")
         
         return "\n".join(context_parts)
+
+    def _format_latest_web_updates(self, results: List[Dict]) -> str:
+        """
+        Build a deterministic latest-data section from web results.
+        """
+        web_results = [r for r in results if r.get("is_web_result")]
+        if not web_results:
+            return ""
+
+        lines = ["## Latest Web Updates"]
+        for result in web_results[:3]:
+            source = result.get("source", "Web Search Result")
+            published_date = result.get("published_date") or "Unknown publish date"
+            retrieved_at = result.get("retrieved_at") or "Unknown retrieval time"
+            source_url = result.get("source_url") or "No URL available"
+            lines.append(f"- {source} | Published: {published_date} | Retrieved: {retrieved_at} | {source_url}")
+
+        return "\n".join(lines)
     
     def _get_no_results_message(self, language: str) -> str:
         """
