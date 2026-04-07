@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from routers import health, unified, settings, audio, admin
+from routers import health, unified, settings as settings_router, audio, admin
 from config import settings
 import logging
 
@@ -27,7 +27,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(unified.router, prefix="/api/v1", tags=["unified"])
-app.include_router(settings.router, prefix="/api/v1", tags=["settings"])
+app.include_router(settings_router.router, prefix="/api/v1", tags=["settings"])
 app.include_router(audio.router, prefix="/api/v1", tags=["audio"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 
