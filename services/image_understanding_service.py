@@ -2,6 +2,7 @@ from openai import OpenAI
 from config import settings
 import logging
 import base64
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
