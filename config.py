@@ -1,38 +1,34 @@
 from pydantic_settings import BaseSettings
-from typing import List
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from typing import List, Optional
 
 class Settings(BaseSettings):
     # API Settings
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
+    ENVIRONMENT: str = "production"
     API_VERSION: str = "v1"
     
     # CORS
     CORS_ORIGINS: List[str] = ["*"]
     
     # OpenAI
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+    OPENAI_API_KEY: str
+    EMBEDDING_MODEL: str = "text-embedding-3-large"
     
     # Qdrant
-    QDRANT_URL: str = os.getenv("QDRANT_URL")
-    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY")
+    QDRANT_URL: str
+    QDRANT_API_KEY: str
     
     # Database
-    DB_HOST: str = os.getenv("DB_HOST")
-    DB_PORT: int = int(os.getenv("DB_PORT", "6438"))
-    DB_NAME: str = os.getenv("DB_NAME")
-    DB_USER: str = os.getenv("DB_USER")
-    DB_PASSWORD: str = os.getenv("DB_PASSWORD")
-    DB_SSLMODE: str = os.getenv("DB_SSLMODE", "require")
+    DB_HOST: str
+    DB_PORT: int = 6438
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
+    DB_SSLMODE: str = "require"
     
     # Admin
-    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
+    JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
