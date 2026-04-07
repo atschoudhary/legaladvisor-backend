@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalAdvisor - Admin Panel</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #0f766e;
+            --primary-light: #14b8a6;
+            --surface: #f8fafc;
+            --border: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --error: #dc2626;
+            --success: #16a34a;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header p {
+            color: var(--text-secondary);
+        }
+        
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .card h2 {
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .btn:hover:not(:disabled) {
+            background: var(--primary-light);
+            transform: translateY(-1px);
+        }
+        
+        .btn:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: white;
+            border-color: var(--primary);
+        }
+        
+        .btn-danger {
+            background: var(--error);
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .alert-success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .user-info {
+            background: var(--surface);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .user-email {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        @media (max-width: 768px) {
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i data-lucide="shield-check"></i>
+                Admin Panel
+            </h1>
+            <p>Manage LegalAdvisor settings</p>
+        </div>
+        
+        <!-- Login Section -->
+        <div id="loginSection" class="card">
+            <h2><i data-lucide="log-in"></i> Admin Login</h2>
+            
+            <div id="loginAlert"></div>
+            
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" required placeholder="admin@example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required placeholder="Enter password">
+                </div>
+                
+                <button type="submit" class="btn" id="loginBtn">
+                    <i data-lucide="log-in"></i>
+                    Login
+                </button>
+            </form>
+            
+            <div style="margin-top: 16px; padding: 12px; background: var(--surface); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
+                <i data-lucide="info" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+                Create admin account using: <code>python create_admin.py create</code>
+            </div>
+        </div>
+        
+        <!-- Settings Section (Hidden until logged in) -->
+        <div id="settingsSection" class="hidden">
+            <div class="card">
+                <div class="user-info">
+                    <div>
+                        <i data-lucide="user"></i>
+                        <span class="user-email" id="userEmail"></span>
+                    </div>
+                    <button class="btn btn-danger" onclick="handleLogout()" style="width: auto; padding: 8px 16px;">
+                        <i data-lucide="log-out"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2><i data-lucide="settings"></i> System Settings</h2>
+                
+                <div id="settingsAlert"></div>
+                
+                <div class="alert alert-info">
+                    <i data-lucide="sparkles"></i>
+                    Legal search and province are automatically detected by AI
+                </div>
+                
+                <form id="settingsForm" onsubmit="handleUpdateSettings(event)">
+                    <div class="settings-grid">
+                        <div class="form-group">
+                            <label>Results Count (top_k)</label>
+                            <input type="number" id="topK" min="1" max="20" value="5">
+                            <small style="color: var(--text-secondary);">Number of search results (1-20)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Min Score</label>
+                            <input type="number" id="minScore" min="0" max="1" step="0.1" value="0.5">
+                            <small style="color: var(--text-secondary);">Minimum relevance (0.0-1.0)</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>TTS Voice</label>
+                        <select id="voice">
+                            <option value="alloy">Alloy - Neutral and balanced</option>
+                            <option value="echo">Echo - Clear and expressive</option>
+                            <option value="fable">Fable - Warm and engaging</option>
+                            <option value="onyx">Onyx - Deep and authoritative</option>
+                            <option value="nova">Nova - Energetic and friendly</option>
+                            <option value="shimmer">Shimmer - Soft and gentle</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="ttsEnabled">
+                            <label for="ttsEnabled">Enable Text-to-Speech</label>
+                        </div>
+                        <small style="color: var(--text-secondary);">Generate audio responses for all queries</small>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="saveBtn">
+                        <i data-lucide="save"></i>
+                        Save Settings
+                    </button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2><i data-lucide="activity"></i> Current Settings</h2>
+                <div id="currentSettings" style="background: var(--surface); padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px;">
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Determine API base URL based on environment
+        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        const API_BASE = isProduction 
+            ? 'https://legaladvisor-backend-ats1563-fcq5tdhe.leapcell.dev/api/v1'
+            : 'http://localhost:8080/api/v1';
+        
+        console.log('Environment:', isProduction ? 'Production' : 'Development');
+        console.log('API Base URL:', API_BASE);
+        
+        // Initialize Lucide icons
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            checkAuth();
+        });
+        
+        // Check if user is already logged in
+        function checkAuth() {
+            const token = localStorage.getItem('admin_token');
+            const email = localStorage.getItem('admin_email');
+            
+            if (token && email) {
+                // Verify token
+                verifyToken(token, email);
+            }
+        }
+        
+        // Verify token validity
+        async function verifyToken(token, email) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/verify`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    showSettingsSection(email);
+                    loadSettings();
+                } else {
+                    // Token invalid, clear and show login
+                    localStorage.removeItem('admin_token');
+                    localStorage.removeItem('admin_email');
+                }
+            } catch (error) {
+                console.error('Token verification failed:', error);
+            }
+        }
+        
+        // Handle login
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const loginAlert = document.getElementById('loginAlert');
+            
+            loginBtn.disabled = true;
+            loginAlert.innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Store token and email
+                    localStorage.setItem('admin_token', data.access_token);
+                    localStorage.setItem('admin_email', data.email);
+                    
+                    // Show success message
+                    loginAlert.innerHTML = `
+                        <div class="alert alert-success">
+                            <i data-lucide="check-circle"></i>
+                            Login successful! Loading settings...
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    
+                    // Show settings section
+                    setTimeout(() => {
+                        showSettingsSection(data.email);
+                        loadSettings();
+                    }, 1000);
+                } else {
+                    loginAlert.innerHTML = `
+                        <div class="alert alert-error">
+                            <i data-lucide="alert-circle"></i>
+                            ${data.detail || 'Login failed'}
+                        </div>
+                    `;
+                    lucide.createIcons();
+                }
+            } catch (error) {
+                loginAlert.innerHTML = `
+                    <div class="alert alert-error">
+                        <i data-lucide="alert-circle"></i>
+                        Connection error: ${error.message}
+                    </div>
+                `;
+                lucide.createIcons();
+            } finally {
+                loginBtn.disabled = false;
+            }
+        }
+        
+        // Show settings section
+        function showSettingsSection(email) {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('settingsSection').classList.remove('hidden');
+            document.getElementById('userEmail').textContent = email;
+            lucide.createIcons();
+        }
+        
+        // Handle logout
+        function handleLogout() {
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin_email');
+            
+            document.getElementById('settingsSection').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('loginForm').reset();
+            document.getElementById('loginAlert').innerHTML = '';
+        }
+        
+        // Load settings
+        async function loadSettings() {
+            const token = localStorage.getItem('admin_token');
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/settings`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const settings = await response.json();
+                    
+                    // Update form
+                    document.getElementById('topK').value = settings.top_k || 5;
+                    document.getElementById('minScore').value = settings.min_score || 0.5;
+                    document.getElementById('voice').value = settings.voice || 'alloy';
+                    document.getElementById('ttsEnabled').checked = settings.tts_enabled || false;
+                    
+                    // Update current settings display
+                    document.getElementById('currentSettings').textContent = JSON.stringify(settings, null, 2);
+                } else if (response.status === 401) {
+                    // Token expired
+                    handleLogout();
+                }
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+        
+        // Handle update settings
+        async function handleUpdateSettings(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('admin_token');
+            const saveBtn = document.getElementById('saveBtn');
+            const settingsAlert = document.getElementById('settingsAlert');
+            
+            saveBtn.disabled = true;
+            settingsAlert.innerHTML = '';
+            
+            const settings = {
+                top_k: parseInt(document.getElementById('topK').value),
+                min_score: parseFloat(document.getElementById('minScore').value),
+                voice: document.getElementById('voice').value,
+                tts_enabled: document.getElementById('ttsEnabled').checked
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    settingsAlert.innerHTML = `
+                        <div class="alert alert-success">
+                            <i data-lucide="check-circle"></i>
+                            Settings updated successfully!
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    
+                    // Update current settings display
+                    document.getElementById('currentSettings').textContent = JSON.stringify(data, null, 2);
+                    
+                    // Clear alert after 3 seconds
+                    setTimeout(() => {
+                        settingsAlert.innerHTML = '';
+                    }, 3000);
+                } else if (response.status === 401) {
+                    // Token expired
+                    handleLogout();
+                } else {
+                    settingsAlert.innerHTML = `
+                        <div class="alert alert-error">
+                            <i data-lucide="alert-circle"></i>
+                            ${data.detail || 'Failed to update settings'}
+                        </div>
+                    `;
+                    lucide.createIcons();
+                }
+            } catch (error) {
+                settingsAlert.innerHTML = `
+                    <div class="alert alert-error">
+                        <i data-lucide="alert-circle"></i>
+                        Connection error: ${error.message}
+                    </div>
+                `;
+                lucide.createIcons();
+            } finally {
+                saveBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

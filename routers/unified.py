@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from typing import Optional
 from services.multilingual_chat_service import multilingual_chat_service
 from services.document_reader_service import document_reader_service
@@ -11,60 +11,86 @@ from services.query_orchestrator import query_orchestrator
 from services.web_search_service import web_search_service
 from services.answer_synthesis_service import answer_synthesis_service
 from services.translation_service import translation_service
+from services.database_service import database_service
 import logging
+import base64
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 async def detect_legal_query(message: str, has_document: bool) -> bool:
     """
-    Automatically detect if the query is legal-related
+    Use LLM to intelligently detect if the query is legal-related
     """
     # If document is attached, likely legal
     if has_document:
         return True
     
-    # Legal keywords (English and Urdu)
-    legal_keywords = [
-        # English
-        'law', 'legal', 'court', 'judge', 'lawyer', 'attorney', 'constitution',
-        'rights', 'act', 'section', 'article', 'criminal', 'civil', 'case',
-        'justice', 'police', 'arrest', 'bail', 'property', 'contract', 'marriage',
-        'divorce', 'inheritance', 'will', 'testament', 'crime', 'punishment',
-        'procedure', 'code', 'ordinance', 'regulation', 'statute', 'legislation',
-        'litigation', 'prosecution', 'defense', 'verdict', 'sentence', 'appeal',
-        # Urdu (transliterated)
-        'qanoon', 'adalat', 'wakeel', 'judge', 'police', 'haq', 'huqooq',
-        'shaadi', 'talaq', 'jaidad', 'wirasat', 'jurm', 'saza'
-    ]
-    
-    message_lower = message.lower()
-    
-    # Check for legal keywords
-    for keyword in legal_keywords:
-        if keyword in message_lower:
-            logger.info(f"Legal keyword detected: {keyword}")
-            return True
-    
-    # Check for question patterns about laws/rights
-    legal_patterns = [
-        'what is the law',
-        'what are the rights',
-        'is it legal',
-        'can i legally',
-        'legal procedure',
-        'according to law',
-        'under the law',
-        'legal age',
-        'legal requirement'
-    ]
-    
-    for pattern in legal_patterns:
-        if pattern in message_lower:
-            logger.info(f"Legal pattern detected: {pattern}")
-            return True
-    
-    return False
+    try:
+        # Use OpenAI to intelligently detect legal queries
+        from services.multilingual_chat_service import multilingual_chat_service
+        
+        response = multilingual_chat_service.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a legal query classifier for Pakistani law.
+
+Analyze the user's query and determine if it is related to legal matters, laws, rights, or legal procedures.
+
+Legal queries include:
+- Questions about laws, rights, legal procedures
+- Questions about courts, judges, lawyers, police
+- Questions about contracts, property, marriage, divorce, inheritance
+- Questions about crimes, punishments, arrests, bail
+- Questions about constitution, legislation, regulations
+- Questions about legal age, legal requirements, legal validity
+- Any query seeking legal information or guidance
+
+Non-legal queries include:
+- General greetings and casual conversation
+- Questions about weather, food, travel, entertainment
+- Technical questions unrelated to law
+- General knowledge questions not about law
+- Personal advice not related to legal matters
+
+Respond with ONLY "yes" if the query is legal-related, or "no" if it is not.
+Do not provide any explanation, just "yes" or "no"."""
+                },
+                {
+                    "role": "user",
+                    "content": message
+                }
+            ],
+            temperature=0.1,
+            max_tokens=5
+        )
+        
+        result = response.choices[0].message.content.strip().lower()
+        is_legal = result == "yes"
+        
+        logger.info(f"LLM legal query detection: '{message[:50]}...' -> {is_legal}")
+        return is_legal
+        
+    except Exception as e:
+        logger.error(f"LLM legal detection failed: {e}, falling back to keyword detection")
+        
+        # Fallback to keyword detection if LLM fails
+        legal_keywords = [
+            'law', 'legal', 'court', 'judge', 'lawyer', 'attorney', 'constitution',
+            'rights', 'act', 'section', 'article', 'criminal', 'civil', 'case',
+            'justice', 'police', 'arrest', 'bail', 'property', 'contract', 'marriage',
+            'divorce', 'inheritance', 'will', 'testament', 'crime', 'punishment',
+            'qanoon', 'adalat', 'wakeel', 'haq', 'huqooq', 'shaadi', 'talaq'
+        ]
+        
+        message_lower = message.lower()
+        for keyword in legal_keywords:
+            if keyword in message_lower:
+                return True
+        
+        return False
 
 @router.post("/message")
 async def unified_message(
@@ -86,10 +112,10 @@ async def unified_message(
     
     **Automatic Features:**
     - Language detection from query
-    - Legal search enabled automatically for legal queries
+    - Legal search enabled automatically using LLM-based intelligent detection
     - Province detection from query content
     - Context integration from images/documents
-    - TTS disabled by default (can be enabled if needed)
+    - TTS audio generation (if enabled in settings)
     
     **Examples:**
     1. "What is property law?" → Auto-detects legal query, enables search
@@ -118,10 +144,11 @@ async def unified_message(
         use_legal_search = await detect_legal_query(final_message, document is not None)
         logger.info(f"Legal query detected: {use_legal_search}")
         
-        # Set default parameters
-        top_k = 5
-        min_score = 0.5
-        province = None  # Will be auto-detected
+        # Get admin-configured settings from database
+        admin_settings = database_service.get_settings()
+        top_k = admin_settings.get("top_k", 5)
+        min_score = admin_settings.get("min_score", 0.5)
+        province = None  # Will be auto-detected by query_orchestrator
         
         # 3. Process Image (if provided)
         if image:
@@ -235,7 +262,20 @@ async def unified_message(
             if not detected_language:
                 detected_language = chat_result["language"]
         
-        # 6. Return Unified Response
+        # 6. Generate TTS Audio (if enabled)
+        audio_base64 = None
+        if admin_settings.get("tts_enabled", False):
+            try:
+                logger.info("Generating TTS audio")
+                voice = admin_settings.get("voice", "alloy")
+                audio_bytes = voice_service.text_to_speech(final_response, voice)
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                logger.info("TTS audio generated successfully")
+            except Exception as e:
+                logger.error(f"TTS generation failed: {e}")
+                # Continue without audio
+        
+        # 7. Return Unified Response
         response_data = {
             "success": True,
             "message": final_message,
@@ -250,6 +290,10 @@ async def unified_message(
                 "auto_detected": True  # Indicates automatic detection
             }
         }
+        
+        # Add audio if TTS was enabled
+        if audio_base64:
+            response_data["audio"] = audio_base64
         
         return JSONResponse(content=response_data)
         

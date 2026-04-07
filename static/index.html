@@ -302,15 +302,65 @@
                 LegalAdvisor - Unified API Testing
             </h1>
             <p>One endpoint for everything: text, images, documents, and voice</p>
+            <div style="margin-top: 12px;">
+                <a href="/admin.html" style="color: var(--primary); text-decoration: none; font-size: 14px; display: inline-flex; align-items: center; gap: 4px;">
+                    <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
+                    Admin Panel
+                </a>
+            </div>
         </div>
         
+        <!-- Settings Card -->
+        <div class="card">
+            <h2><i data-lucide="settings"></i> Admin Settings</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 14px;">
+                <i data-lucide="info" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+                Legal search and province are automatically detected from queries
+            </p>
+            
+            <div class="settings-grid">
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="ttsEnabled" onchange="updateSettings()">
+                        <label for="ttsEnabled">Enable Text-to-Speech</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Voice</label>
+                    <select id="voice" onchange="updateSettings()">
+                        <option value="alloy">Alloy</option>
+                        <option value="echo">Echo</option>
+                        <option value="fable">Fable</option>
+                        <option value="onyx">Onyx</option>
+                        <option value="nova">Nova</option>
+                        <option value="shimmer">Shimmer</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Results Count (top_k)</label>
+                    <input type="number" id="topK" min="1" max="20" value="5" onchange="updateSettings()">
+                </div>
+                
+                <div class="form-group">
+                    <label>Min Score</label>
+                    <input type="number" id="minScore" min="0" max="1" step="0.1" value="0.5" onchange="updateSettings()">
+                </div>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="loadSettings()">
+                <i data-lucide="refresh-cw"></i>
+                Reload Settings
+            </button>
+        </div>
         
         <!-- Message Card -->
         <div class="card">
             <h2><i data-lucide="message-circle"></i> Send Message</h2>
             <p style="color: var(--text-secondary); margin-bottom: 16px;">
                 <i data-lucide="sparkles" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
-                System automatically detects legal queries and selects appropriate search
+                AI automatically detects legal queries using intelligent analysis (not just keywords)
             </p>
             
             <div class="form-group">
@@ -383,7 +433,50 @@
         // Initialize Lucide icons on page load
         window.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
+            loadSettings(); // Load settings on page load
         });
+        
+        // Load settings
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${API_BASE}/settings`);
+                const settings = await response.json();
+                
+                document.getElementById('ttsEnabled').checked = settings.tts_enabled || false;
+                document.getElementById('voice').value = settings.voice || 'alloy';
+                document.getElementById('topK').value = settings.top_k || 5;
+                document.getElementById('minScore').value = settings.min_score || 0.5;
+                
+                console.log('Settings loaded:', settings);
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+        
+        // Update settings
+        async function updateSettings() {
+            try {
+                const settings = {
+                    tts_enabled: document.getElementById('ttsEnabled').checked,
+                    voice: document.getElementById('voice').value,
+                    top_k: parseInt(document.getElementById('topK').value),
+                    min_score: parseFloat(document.getElementById('minScore').value)
+                };
+                
+                const response = await fetch(`${API_BASE}/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                const data = await response.json();
+                console.log('Settings updated:', data);
+            } catch (error) {
+                console.error('Failed to update settings:', error);
+            }
+        }
         
         // File preview
         function previewFile(inputId, previewId) {

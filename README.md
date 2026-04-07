@@ -72,13 +72,11 @@ Unified endpoint for all interactions. Accepts text, images, documents, and audi
 ```
 POST /api/v1/settings
 ```
-Configure user preferences.
+Configure admin preferences.
 
 **Body** (application/json):
 ```json
 {
-  "use_legal_search": false,
-  "province": null,
   "top_k": 5,
   "min_score": 0.5,
   "voice": "alloy",
@@ -86,13 +84,15 @@ Configure user preferences.
 }
 ```
 
-**Settings Options**:
-- `use_legal_search` (boolean) - Enable legal document search
-- `province` (string) - Filter by province (sindh, punjab, khyber_pakhtunkhwa, balochistan)
+**Admin Settings Options**:
 - `top_k` (integer) - Number of results (1-20)
 - `min_score` (float) - Minimum relevance score (0.0-1.0)
 - `voice` (string) - TTS voice (alloy, echo, fable, onyx, nova, shimmer)
 - `tts_enabled` (boolean) - Enable audio responses
+
+**Auto-Detected (Cannot be configured)**:
+- `use_legal_search` - Automatically enabled when legal keywords are detected
+- `province` - Automatically detected from query content
 
 ### 3. Get Settings
 ```
@@ -136,12 +136,26 @@ uvicorn main:app --reload
 
 Server will be available at `http://localhost:8080`
 
-## API Documentation
+## Documentation
 
-Interactive documentation:
+### Interactive API Documentation
 - **Swagger UI**: http://localhost:8080/docs
 - **ReDoc**: http://localhost:8080/redoc
 - **Testing UI**: http://localhost:8080
+
+### Complete Documentation
+For comprehensive documentation, see the **[docs/](docs/)** folder:
+
+- **[Getting Started](docs/GETTING_STARTED.md)** - Installation and setup guide
+- **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
+- **[API Examples](docs/API_EXAMPLES.md)** - Request/response examples
+- **[Features](docs/FEATURES.md)** - Complete feature list
+- **[Architecture](docs/ARCHITECTURE.md)** - System architecture
+- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[Environment](docs/ENVIRONMENT.md)** - Environment configuration
+- **[Mobile Integration](docs/MOBILE_INTEGRATION.md)** - Mobile app integration
+
+**Quick Start**: [docs/README.md](docs/README.md)
 
 ## Usage Examples
 
@@ -176,7 +190,7 @@ curl -X POST http://localhost:8080/api/v1/message \
 ```bash
 curl -X POST http://localhost:8080/api/v1/settings \
   -H "Content-Type: application/json" \
-  -d '{"use_legal_search": true, "province": "punjab"}'
+  -d '{"tts_enabled": true, "voice": "nova", "top_k": 10}'
 ```
 
 ## Project Structure
@@ -218,9 +232,10 @@ backend/
 
 The unified endpoint is designed for seamless mobile integration:
 
-1. **Configure settings once** (on app start)
+1. **Configure admin settings once** (on app start or in settings screen)
 2. **Send any combination** of text, image, document, or audio
-3. **Receive unified response** with optional TTS audio
+3. **System automatically detects** legal queries and province
+4. **Receive unified response** with optional TTS audio
 
 See [MOBILE_IMPLEMENTATION.md](MOBILE_IMPLEMENTATION.md) for detailed mobile integration guide.
 

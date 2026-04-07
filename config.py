@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     QDRANT_URL: str = os.getenv("QDRANT_URL")
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY")
     
+    # Database
+    DB_HOST: str = os.getenv("DB_HOST")
+    DB_PORT: int = int(os.getenv("DB_PORT", "6438"))
+    DB_NAME: str = os.getenv("DB_NAME")
+    DB_USER: str = os.getenv("DB_USER")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD")
+    DB_SSLMODE: str = os.getenv("DB_SSLMODE", "require")
+    
+    # Admin
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
+    
     # Collections
     COLLECTION_SINDH: str = "legaladvisor_sindh"
     COLLECTION_PUNJAB: str = "legaladvisor_punjab"
