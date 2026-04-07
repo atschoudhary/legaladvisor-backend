@@ -131,6 +131,7 @@ async def unified_message(
         final_message = message
         detected_language = None
         image_summary_data = None
+        image_analysis_text = ""
         
         # 1. Process Audio (if provided) - transcribe and use as message
         if audio:
@@ -174,6 +175,7 @@ async def unified_message(
                 detected_language or "english"
             )
             image_analysis = image_understanding_service.sanitize_output_text(image_analysis)
+            image_analysis_text = image_analysis
             context_parts.append(f"[Image analysis: {image_analysis}]")
 
             image_summary_data = image_understanding_service.build_image_summary(
@@ -260,6 +262,11 @@ async def unified_message(
                 detected_language or "english"
             )
             final_response = synthesis_result.get("answer")
+        elif image is not None and image_analysis_text:
+            # For image queries, use vision analysis directly to avoid non-vision chat refusal text.
+            final_response = image_analysis_text
+            if not detected_language:
+                detected_language = multilingual_chat_service.detect_language(final_message)
         else:
             # Use chat for general queries with context
             if context_parts:

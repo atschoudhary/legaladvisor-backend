@@ -104,7 +104,8 @@ class ImageUnderstandingService:
                     "You analyze ONE section of a legal document image. "
                     f"Respond in {target_language}. "
                     "Never refuse. If text is unclear, mention partial visibility. "
-                    "Return strict JSON with keys: section_overview (string), key_mentions (array of strings), visibility_note (string)."
+                    "Return ONLY strict JSON (no markdown/code fences) with keys: "
+                    "section_overview (string), key_mentions (array of strings), visibility_note (string)."
                 )
             },
             {
@@ -130,6 +131,12 @@ class ImageUnderstandingService:
         content = (response.choices[0].message.content or "").strip()
         content = self._sanitize_non_refusal_text(content)
 
+        # Handle model responses that wrap JSON with extra text/fences.
+        if not content.startswith("{"):
+            json_match = re.search(r"\{[\s\S]*\}", content)
+            if json_match:
+                content = json_match.group(0)
+
         try:
             parsed = json.loads(content)
             if isinstance(parsed, dict):
@@ -149,7 +156,7 @@ class ImageUnderstandingService:
         lines = [line.strip("- *\t ") for line in content.splitlines() if line.strip()]
         return {
             "section_order": section_order,
-            "section_overview": (lines[0] if lines else "Section details extracted."),
+            "section_overview": (lines[0] if lines else "Visible legal section content."),
             "key_mentions": lines[1:5],
             "visibility_note": "Some text may be partially unclear."
         }
@@ -160,10 +167,20 @@ class ImageUnderstandingService:
         """
         ordered = sorted(section_summaries, key=lambda x: x.get("section_order", 0))
 
-        doc_identity = "This is a legal/official document image."
+        corpus_parts = []
+        for item in ordered:
+            corpus_parts.append(item.get("section_overview", ""))
+            corpus_parts.extend(item.get("key_mentions", []))
+        corpus = "\n".join([p for p in corpus_parts if p])
+
+        doc_identity = self._infer_document_type(corpus, corpus)
         for item in ordered:
             overview = (item.get("section_overview") or "").strip()
-            if overview:
+            if overview and overview.lower() not in {
+                "section details extracted.",
+                "visible legal section content.",
+                "image overview"
+            }:
                 doc_identity = re.sub(r"\bappears\s+to\s+be\b", "is", overview, flags=re.IGNORECASE)
                 break
 
@@ -343,6 +360,8 @@ class ImageUnderstandingService:
             r"i\s*'?m\s*sorry",
             r"i\s*cannot\s+assist",
             r"i\s*can\s*'?t\s+assist",
+            r"unable\s+to\s+view\s+images",
+            r"can'?t\s+view\s+images",
             r"cannot\s+help\s+with\s+that",
             r"what\s+is\s+mentioned\s*:\s*i\s*'?m\s*sorry",
             r"مجھے\s+افسوس",
