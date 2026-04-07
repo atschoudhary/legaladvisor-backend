@@ -173,6 +173,7 @@ async def unified_message(
                 final_message,
                 detected_language or "english"
             )
+            image_analysis = image_understanding_service.sanitize_output_text(image_analysis)
             context_parts.append(f"[Image analysis: {image_analysis}]")
 
             image_summary_data = image_understanding_service.build_image_summary(
@@ -287,6 +288,7 @@ async def unified_message(
             flags=re.IGNORECASE
         )
         final_response = re.sub(r"\bappears\s+to\s+be\b", "is", final_response, flags=re.IGNORECASE)
+        final_response = image_understanding_service.sanitize_output_text(final_response)
         
         # 6. Generate TTS Audio (if enabled)
         audio_base64 = None

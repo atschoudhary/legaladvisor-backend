@@ -4,6 +4,11 @@ import logging
 import base64
 from typing import Dict
 import re
+import json
+import math
+from io import BytesIO
+
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +37,180 @@ class ImageUnderstandingService:
                 temperature=temperature,
                 max_tokens=max_tokens
             )
+
+    def _preprocess_image(self, image_content: bytes) -> Image.Image:
+        """
+        Preprocess image for better section-level readability.
+        """
+        image = Image.open(BytesIO(image_content)).convert("RGB")
+
+        # Light normalization to improve document text clarity.
+        gray = ImageOps.grayscale(image)
+        gray = ImageOps.autocontrast(gray, cutoff=2)
+        gray = gray.filter(ImageFilter.SHARPEN)
+        enhanced = ImageEnhance.Contrast(gray).enhance(1.25)
+
+        # Upscale small images to improve OCR/vision readability.
+        if enhanced.width < 1400:
+            scale = 1400 / max(1, enhanced.width)
+            new_size = (1400, int(enhanced.height * scale))
+            enhanced = enhanced.resize(new_size, Image.Resampling.LANCZOS)
+
+        return enhanced.convert("RGB")
+
+    def _build_ordered_sections(self, image: Image.Image):
+        """
+        Split image top-to-bottom with overlap to preserve continuity.
+        """
+        width, height = image.size
+        aspect_ratio = height / max(1, width)
+
+        # More vertical sections for tall scanned documents.
+        section_count = 1 if aspect_ratio < 1.2 else max(2, min(6, int(round(aspect_ratio * 1.8))))
+        section_height = int(math.ceil(height / section_count))
+        overlap = max(30, int(section_height * 0.1))
+
+        sections = []
+        for idx in range(section_count):
+            nominal_top = idx * section_height
+            nominal_bottom = min(height, (idx + 1) * section_height)
+
+            top = 0 if idx == 0 else max(0, nominal_top - overlap)
+            bottom = height if idx == section_count - 1 else min(height, nominal_bottom + overlap)
+
+            crop = image.crop((0, top, width, bottom))
+            sections.append({
+                "order": idx + 1,
+                "top": top,
+                "bottom": bottom,
+                "image": crop
+            })
+
+        return sections
+
+    def _image_to_base64_jpeg(self, image: Image.Image) -> str:
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=90, optimize=True)
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    def _analyze_section(self, section_b64: str, section_order: int, user_query: str, target_language: str) -> Dict:
+        """
+        Analyze one section and return structured summary.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You analyze ONE section of a legal document image. "
+                    f"Respond in {target_language}. "
+                    "Never refuse. If text is unclear, mention partial visibility. "
+                    "Return strict JSON with keys: section_overview (string), key_mentions (array of strings), visibility_note (string)."
+                )
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Section order: {section_order} (top-to-bottom). "
+                            f"User query: {user_query}. "
+                            "Summarize this section only."
+                        )
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{section_b64}"}
+                    }
+                ]
+            }
+        ]
+
+        response = self._create_vision_completion(messages=messages, temperature=0.2, max_tokens=800)
+        content = (response.choices[0].message.content or "").strip()
+        content = self._sanitize_non_refusal_text(content)
+
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict):
+                mentions = parsed.get("key_mentions") or []
+                if not isinstance(mentions, list):
+                    mentions = [str(mentions)]
+                return {
+                    "section_order": section_order,
+                    "section_overview": str(parsed.get("section_overview") or "").strip(),
+                    "key_mentions": [str(m).strip() for m in mentions if str(m).strip()],
+                    "visibility_note": str(parsed.get("visibility_note") or "").strip()
+                }
+        except Exception:
+            pass
+
+        # Fallback when JSON formatting fails.
+        lines = [line.strip("- *\t ") for line in content.splitlines() if line.strip()]
+        return {
+            "section_order": section_order,
+            "section_overview": (lines[0] if lines else "Section details extracted."),
+            "key_mentions": lines[1:5],
+            "visibility_note": "Some text may be partially unclear."
+        }
+
+    def _combine_ordered_section_summaries(self, section_summaries) -> str:
+        """
+        Merge section-level summaries into final ordered document overview.
+        """
+        ordered = sorted(section_summaries, key=lambda x: x.get("section_order", 0))
+
+        doc_identity = "This is a legal/official document image."
+        for item in ordered:
+            overview = (item.get("section_overview") or "").strip()
+            if overview:
+                doc_identity = re.sub(r"\bappears\s+to\s+be\b", "is", overview, flags=re.IGNORECASE)
+                break
+
+        combined_overview_parts = [i.get("section_overview", "").strip() for i in ordered[:2] if i.get("section_overview")]
+        what_it_is_about = " ".join(combined_overview_parts).strip() if combined_overview_parts else doc_identity
+
+        mentioned_items = []
+        seen = set()
+        for item in ordered:
+            for mention in item.get("key_mentions", []):
+                normalized = re.sub(r"\s+", " ", mention).strip().lower()
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                mentioned_items.append(mention.strip())
+                if len(mentioned_items) >= 7:
+                    break
+            if len(mentioned_items) >= 7:
+                break
+
+        if not mentioned_items:
+            mentioned_items = ["Visible fields and narrative legal details are present, but some parts are unclear."]
+
+        visibility_notes = [i.get("visibility_note", "").strip() for i in ordered if i.get("visibility_note")]
+        visibility_note = " ".join(visibility_notes[:2]).strip() or "Some portions may be partially unclear due to image quality."
+
+        lines = [
+            "## Image Overview",
+            f"- What this document is: {doc_identity}",
+            f"- What it is about: {what_it_is_about}",
+            "- What is mentioned:"
+        ]
+        for mention in mentioned_items[:5]:
+            lines.append(f"  - {mention}")
+        lines.append(f"- Visibility note: {visibility_note}")
+        lines.append("- Processing order: Sections were analyzed from top to bottom.")
+
+        return self._sanitize_non_refusal_text("\n".join(lines))
     
     def analyze_image(self, image_content: bytes, user_query: str, language: str = "english") -> str:
         """
         Analyze image and provide explanation based on user query
         """
         try:
-            # Encode image to base64
-            base64_image = base64.b64encode(image_content).decode('utf-8')
-            
+            preprocessed = self._preprocess_image(image_content)
+            sections = self._build_ordered_sections(preprocessed)
+
             language_names = {
                 "english": "English",
                 "urdu": "Urdu",
@@ -48,61 +218,21 @@ class ImageUnderstandingService:
                 "sindhi": "Sindhi",
                 "roman_urdu": "Roman Urdu (Urdu written in English alphabet)"
             }
-            
+
             target_language = language_names.get(language, "English")
-            
-            messages = [
-                    {
-                        "role": "system",
-                                                "content": f"""You are an AI assistant that analyzes images and provides high-level document understanding.
 
-Analyze the provided image and answer the user's question in {target_language}.
+            section_summaries = []
+            for section in sections:
+                section_b64 = self._image_to_base64_jpeg(section["image"])
+                section_summary = self._analyze_section(
+                    section_b64=section_b64,
+                    section_order=section["order"],
+                    user_query=user_query,
+                    target_language=target_language
+                )
+                section_summaries.append(section_summary)
 
-RULES:
-1. Identify what type of document/image this is
-2. Explain what the document is generally about (high-level)
-3. List key visible items (headings/fields/types of details), not verbatim full transcription
-4. If text is unclear, say it is partially unclear and still provide best-effort overall summary
-5. Never respond with refusal/apology for normal document understanding tasks
-6. Never include phrases like "I'm sorry, I can't assist with that"
-7. Do not provide legal advice, only document understanding
-8. Use markdown formatting for better readability
-4. Respond in {target_language}
-9. If the image contains legal documents, maintain accuracy
-10. Be specific and helpful
-
-MARKDOWN FORMATTING:
-- Use ## Image Overview
-- Use these bullet labels exactly:
-    - What this document is
-    - What it is about
-    - What is mentioned
-    - Visibility note"""
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"User Question: {user_query}\n\nPlease analyze this image and answer the question."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ]
-
-            response = self._create_vision_completion(
-                messages=messages,
-                temperature=0.3,
-                max_tokens=2000
-            )
-            
-            answer = response.choices[0].message.content
+            answer = self._combine_ordered_section_summaries(section_summaries)
             logger.info(f"Image analyzed successfully in {language}")
             return answer
             
@@ -115,37 +245,48 @@ MARKDOWN FORMATTING:
         Extract text from image (OCR)
         """
         try:
-            base64_image = base64.b64encode(image_content).decode('utf-8')
-            
-            messages = [
+            preprocessed = self._preprocess_image(image_content)
+            sections = self._build_ordered_sections(preprocessed)
+
+            ordered_text_blocks = []
+            for section in sections:
+                section_b64 = self._image_to_base64_jpeg(section["image"])
+                messages = [
                     {
                         "role": "system",
-                        "content": "Extract visible text from this image. Return plain text only. If some parts are unclear, mark them as [unclear] and continue with best-effort extraction. Do not refuse."
+                        "content": (
+                            "Extract visible text from this section. Return plain text only. "
+                            "If some parts are unclear, mark as [unclear]. Do not refuse."
+                        )
                     },
                     {
                         "role": "user",
                         "content": [
-                            {
-                                "type": "text",
-                                "text": "Please extract all text from this image."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
+                            {"type": "text", "text": f"Section {section['order']} (top-to-bottom). Extract text."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{section_b64}"}}
                         ]
                     }
                 ]
 
-            response = self._create_vision_completion(
-                messages=messages,
-                temperature=0.1,
-                max_tokens=2000
-            )
-            
-            extracted_text = response.choices[0].message.content
+                response = self._create_vision_completion(messages=messages, temperature=0.1, max_tokens=1200)
+                section_text = self._sanitize_non_refusal_text((response.choices[0].message.content or "").strip())
+                ordered_text_blocks.append((section["order"], section_text))
+
+            # Preserve top-to-bottom order and deduplicate overlap repeats.
+            dedup_lines = []
+            seen = set()
+            for order, block in sorted(ordered_text_blocks, key=lambda x: x[0]):
+                for line in block.splitlines():
+                    cleaned = re.sub(r"\s+", " ", line).strip()
+                    if not cleaned:
+                        continue
+                    norm = cleaned.lower()
+                    if norm in seen:
+                        continue
+                    seen.add(norm)
+                    dedup_lines.append(cleaned)
+
+            extracted_text = "\n".join(dedup_lines)
             logger.info("Text extracted from image successfully")
             return extracted_text
             
@@ -160,13 +301,17 @@ MARKDOWN FORMATTING:
         clean_analysis = self._sanitize_non_refusal_text((image_analysis or "").replace("#", "").strip())
         clean_text = self._sanitize_non_refusal_text((extracted_text or "").strip())
 
-        what_this_is = self._infer_document_type(clean_analysis, clean_text)
-        if clean_analysis:
-            first_line = next((line.strip("- * ").strip() for line in clean_analysis.splitlines() if line.strip()), "")
-            if first_line:
-                what_this_is = first_line[:220]
+        what_this_is = self._extract_labeled_content(clean_analysis, "what this document is")
+        if not what_this_is:
+            what_this_is = self._infer_document_type(clean_analysis, clean_text)
+            if clean_analysis:
+                first_line = next((line.strip("- * ").strip() for line in clean_analysis.splitlines() if line.strip()), "")
+                if first_line and first_line.lower() not in {"image overview", "overview"}:
+                    what_this_is = first_line[:220]
 
-        mentioned = "The image text is partially visible; a full transcription is not clear."
+        mentioned = self._extract_labeled_content(clean_analysis, "what is mentioned")
+        if not mentioned:
+            mentioned = "The image text is partially visible; a full transcription is not clear."
         if clean_text:
             lines = [line.strip() for line in clean_text.splitlines() if line.strip()]
             preview = " | ".join(lines[:3])
@@ -180,6 +325,12 @@ MARKDOWN FORMATTING:
             "what_this_is": what_this_is,
             "what_is_mentioned": mentioned
         }
+
+    def sanitize_output_text(self, text: str) -> str:
+        """
+        Public sanitizer for router-level final response cleanup.
+        """
+        return self._sanitize_non_refusal_text(text or "")
 
     def _sanitize_non_refusal_text(self, text: str) -> str:
         """
@@ -195,8 +346,11 @@ MARKDOWN FORMATTING:
             r"cannot\s+help\s+with\s+that",
             r"what\s+is\s+mentioned\s*:\s*i\s*'?m\s*sorry",
             r"مجھے\s+افسوس",
+            r"مجھے\s+معذرت",
             r"میں\s+.*\s+مدد\s+نہیں\s+کر\s+سکتا",
-            r"نہیں\s+کر\s+سکتا"
+            r"براہ\s+راست\s+مدد\s+نہیں\s+کر\s+سکتا",
+            r"نہیں\s+کر\s+سکتا",
+            r"اگر\s+آپ\s+کو\s+مزید\s+وضاحت\s+یا\s+مدد\s+کی\s+ضرورت"
         ]
 
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -209,6 +363,22 @@ MARKDOWN FORMATTING:
             kept.append(cleaned_line)
 
         return "\n".join(kept).strip()
+
+    def _extract_labeled_content(self, analysis: str, label: str) -> str:
+        """
+        Extract value after markdown-style labels like 'What this document is:'.
+        """
+        if not analysis:
+            return ""
+
+        pattern = re.compile(rf"{re.escape(label)}\s*:\s*(.+)", re.IGNORECASE)
+        for line in analysis.splitlines():
+            match = pattern.search(line.strip("- * ").strip())
+            if match:
+                value = match.group(1).strip()
+                return (value[:300] + "...") if len(value) > 300 else value
+
+        return ""
 
     def _infer_document_type(self, analysis: str, text: str) -> str:
         """
