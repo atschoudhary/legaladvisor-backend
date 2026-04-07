@@ -93,6 +93,21 @@ class ImageUnderstandingService:
         image.save(buffer, format="JPEG", quality=90, optimize=True)
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+    def _image_to_jpeg_bytes(self, image: Image.Image) -> bytes:
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=90, optimize=True)
+        return buffer.getvalue()
+
+    def _language_label(self, language: str) -> str:
+        language_names = {
+            "english": "English",
+            "urdu": "Urdu",
+            "punjabi": "Pakistani Punjabi (Shahmukhi script)",
+            "sindhi": "Sindhi",
+            "roman_urdu": "Roman Urdu"
+        }
+        return language_names.get(language, "English")
+
     def _analyze_section(self, section_b64: str, section_order: int, user_query: str, target_language: str) -> Dict:
         """
         Analyze one section and return structured summary.
@@ -275,6 +290,73 @@ class ImageUnderstandingService:
         response = self._create_vision_completion(messages=messages, temperature=0.2, max_tokens=1400)
         return self._sanitize_non_refusal_text((response.choices[0].message.content or "").strip())
 
+    def _analyze_image_with_openai(self, image_content: bytes, user_query: str, language: str) -> str:
+        """
+        OpenAI sectioned image analysis path.
+        """
+        logger.info(f"Image analysis provider=openai primary_model={self.primary_model} fallback_model={self.fallback_model} language={language}")
+
+        preprocessed = self._preprocess_image(image_content)
+        sections = self._build_ordered_sections(preprocessed)
+        target_language = self._language_label(language)
+
+        section_summaries = []
+        for section in sections:
+            section_b64 = self._image_to_base64_jpeg(section["image"])
+            section_summary = self._analyze_section(
+                section_b64=section_b64,
+                section_order=section["order"],
+                user_query=user_query,
+                target_language=target_language
+            )
+            section_summaries.append(section_summary)
+
+        answer = self._combine_ordered_section_summaries(section_summaries)
+        if self._is_low_quality_analysis(answer):
+            answer = self._fallback_full_image_analysis(
+                image_content=image_content,
+                user_query=user_query,
+                target_language=target_language
+            )
+        return answer
+
+    def _refine_gemini_output_with_openai(self, gemini_analysis: str, user_query: str, language: str) -> str:
+        """
+        Refine Gemini analysis with OpenAI for cleaner, more detailed final response.
+        """
+        target_language = self._language_label(language)
+        logger.info(f"Refining Gemini image analysis with OpenAI model={settings.IMAGE_ANALYSIS_REFINER_MODEL} language={language}")
+
+        response = self.client.chat.completions.create(
+            model=settings.IMAGE_ANALYSIS_REFINER_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You refine image-analysis text into a clear, detailed final response. "
+                        f"Respond in {target_language}. "
+                        "Use only the analysis text provided; do not invent facts. "
+                        "Output markdown with this exact structure: "
+                        "## Image Overview, - What this document is:, - What it is about:, - What is mentioned:, - Visibility note:."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"User query: {user_query}\n\n"
+                        "Gemini analysis:\n"
+                        f"{gemini_analysis}\n\n"
+                        "Produce final detailed response now."
+                    )
+                }
+            ],
+            temperature=0.2,
+            max_tokens=1400
+        )
+
+        refined = (response.choices[0].message.content or "").strip()
+        return self._sanitize_non_refusal_text(refined)
+
     def _infer_document_about(self, mentions) -> str:
         """
         Build a high-level 'about' sentence from visible mentions.
@@ -290,42 +372,77 @@ class ImageUnderstandingService:
 
         return "This document is about a formal legal matter containing case/party details, dated entries, and narrative facts."
     
-    def analyze_image(self, image_content: bytes, user_query: str, language: str = "english") -> str:
+    def _analyze_image_with_gemini(self, image_content: bytes, user_query: str, language: str = "english") -> str:
+        """
+        Analyze image with Gemini using API key from environment.
+        """
+        if not settings.GEMINI_API_KEY:
+            raise Exception("GEMINI_API_KEY is not configured")
+
+        logger.info(f"Image analysis provider=gemini model={settings.GEMINI_IMAGE_MODEL} language={language}")
+
+        try:
+            from google import genai
+            from google.genai import types
+        except Exception as import_error:
+            raise Exception(f"google-genai dependency is missing: {import_error}")
+
+        target_language = self._language_label(language)
+
+        preprocessed = self._preprocess_image(image_content)
+        jpeg_bytes = self._image_to_jpeg_bytes(preprocessed)
+
+        prompt = (
+            f"User query: {user_query}\n"
+            f"Respond strictly in {target_language}.\n"
+            "Analyze this image and return markdown with:\n"
+            "## Image Overview\n"
+            "- What this document is:\n"
+            "- What it is about:\n"
+            "- What is mentioned:\n"
+            "- Visibility note:\n"
+            "Use only visible content. No refusal text."
+        )
+
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=settings.GEMINI_IMAGE_MODEL,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=prompt),
+                        types.Part.from_bytes(data=jpeg_bytes, mime_type="image/jpeg")
+                    ]
+                )
+            ]
+        )
+
+        response_text = getattr(response, "text", "") or ""
+        return self._sanitize_non_refusal_text(response_text.strip())
+
+    def analyze_image(self, image_content: bytes, user_query: str, language: str = "english", provider: str = "openai") -> str:
         """
         Analyze image and provide explanation based on user query
         """
         try:
-            preprocessed = self._preprocess_image(image_content)
-            sections = self._build_ordered_sections(preprocessed)
+            if provider == "gemini":
+                try:
+                    gemini_analysis = self._analyze_image_with_gemini(image_content, user_query, language)
+                    # Always pass Gemini result through OpenAI for final detailed output.
+                    answer = self._refine_gemini_output_with_openai(gemini_analysis, user_query, language)
+                    if self._is_low_quality_analysis(answer):
+                        logger.warning("Gemini+OpenAI refined output is low quality; falling back to OpenAI native image analysis")
+                        answer = self._analyze_image_with_openai(image_content, user_query, language)
+                    logger.info(f"Image analyzed successfully in {language}")
+                    return answer
+                except Exception as gemini_error:
+                    logger.warning(f"Gemini image analysis failed ({gemini_error}); falling back to OpenAI analysis")
+                    answer = self._analyze_image_with_openai(image_content, user_query, language)
+                    logger.info(f"Image analyzed successfully in {language}")
+                    return answer
 
-            language_names = {
-                "english": "English",
-                "urdu": "Urdu",
-                "punjabi": "Pakistani Punjabi (Shahmukhi script)",
-                "sindhi": "Sindhi",
-                "roman_urdu": "Roman Urdu (Urdu written in English alphabet)"
-            }
-
-            target_language = language_names.get(language, "English")
-
-            section_summaries = []
-            for section in sections:
-                section_b64 = self._image_to_base64_jpeg(section["image"])
-                section_summary = self._analyze_section(
-                    section_b64=section_b64,
-                    section_order=section["order"],
-                    user_query=user_query,
-                    target_language=target_language
-                )
-                section_summaries.append(section_summary)
-
-            answer = self._combine_ordered_section_summaries(section_summaries)
-            if self._is_low_quality_analysis(answer):
-                answer = self._fallback_full_image_analysis(
-                    image_content=image_content,
-                    user_query=user_query,
-                    target_language=target_language
-                )
+            answer = self._analyze_image_with_openai(image_content, user_query, language)
             logger.info(f"Image analyzed successfully in {language}")
             return answer
             

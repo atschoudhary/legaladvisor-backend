@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-large"
     IMAGE_ANALYSIS_MODEL: str = "gpt-4.1"
     IMAGE_ANALYSIS_FALLBACK_MODEL: str = "gpt-4o"
+    IMAGE_ANALYSIS_REFINER_MODEL: str = "gpt-4.1"
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_IMAGE_MODEL: str = "gemini-3-flash-preview"
     
     # Qdrant
     QDRANT_URL: str

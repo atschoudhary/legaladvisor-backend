@@ -98,7 +98,8 @@ async def unified_message(
     message: str = Form(...),
     image: Optional[UploadFile] = File(None),
     document: Optional[UploadFile] = File(None),
-    audio: Optional[UploadFile] = File(None)
+    audio: Optional[UploadFile] = File(None),
+    use_gemini_image: bool = Form(True)
 ):
     """
     Unified endpoint for all interactions - Fully Automatic
@@ -132,6 +133,7 @@ async def unified_message(
         detected_language = None
         image_summary_data = None
         image_analysis_text = ""
+        image_provider = "openai"
         
         # 1. Process Audio (if provided) - transcribe and use as message
         if audio:
@@ -167,12 +169,23 @@ async def unified_message(
                     context_parts.append(f"[Text from image: {image_text}]")
             except:
                 pass
+
+            # Prefer image-language text when available.
+            if not detected_language:
+                language_seed = (image_text[:1200] if image_text else final_message)
+                detected_language = multilingual_chat_service.detect_language(language_seed)
             
             # Analyze image with user's query
+            # UI toggle is removed; enforce Gemini-first image analysis.
+            if use_gemini_image is False:
+                logger.info("Received use_gemini_image=False, but Gemini is enforced for image requests.")
+            image_provider = "gemini"
+            logger.info(f"Image analysis selection: use_gemini_image={use_gemini_image}, provider={image_provider}")
             image_analysis = image_understanding_service.analyze_image(
                 image_content,
                 final_message,
-                detected_language or "english"
+                detected_language or "english",
+                provider=image_provider
             )
             image_analysis = image_understanding_service.sanitize_output_text(image_analysis)
             image_analysis_text = image_analysis
@@ -323,7 +336,9 @@ async def unified_message(
                 "had_document": document is not None,
                 "used_legal_search": use_legal_search,
                 "legal_results_count": len(legal_results) if legal_results else 0,
-                "auto_detected": True  # Indicates automatic detection
+                "auto_detected": True,  # Indicates automatic detection
+                "image_provider": image_provider if image is not None else None,
+                "use_gemini_image": use_gemini_image
             }
         }
 
