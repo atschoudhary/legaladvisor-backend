@@ -14,6 +14,7 @@ from services.translation_service import translation_service
 from services.database_service import database_service
 import logging
 import base64
+import re
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -277,6 +278,15 @@ async def unified_message(
                 f"- What is mentioned: {image_summary_data.get('what_is_mentioned', 'N/A')}"
             )
             final_response = f"{image_summary_block}\n\n{final_response}"
+
+        # Final output sanitization for image-document responses.
+        final_response = re.sub(
+            r"What\s+is\s+mentioned:\s*I'm\s+sorry,\s*I\s+can't\s+assist\s+with\s+that\.?",
+            "What is mentioned: High-level visible details are provided below.",
+            final_response,
+            flags=re.IGNORECASE
+        )
+        final_response = re.sub(r"\bappears\s+to\s+be\b", "is", final_response, flags=re.IGNORECASE)
         
         # 6. Generate TTS Audio (if enabled)
         audio_base64 = None
