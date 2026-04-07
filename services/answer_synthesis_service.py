@@ -2,6 +2,7 @@ from openai import OpenAI
 from typing import List, Dict
 from config import settings
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,10 @@ CRITICAL RULES:
 
 ANSWER STRUCTURE (use markdown):
 1. **Direct Answer**: Start with a clear, direct answer to the question
-2. **Legal Basis**: Explain the relevant laws, acts, or provisions
-3. **Key Points**: Break down important details using bullet points
-4. **Additional Context**: Provide relevant context if helpful
+2. **Latest Legal Position**: Prioritize the most recent legal developments first
+3. **Legal Basis**: Explain the relevant laws, acts, or provisions
+4. **Key Points**: Break down important details using bullet points
+5. **Additional Context**: Provide relevant context if helpful
 
 LANGUAGE RULES:
 - If query is in English, respond in English
@@ -46,6 +48,7 @@ MARKDOWN FORMATTING:
 
 IMPORTANT:
 - When web data exists, include concise source attribution (name/date/link if available)
+- Do not repeat sections or headings in the final answer
 - If results contradict each other, mention both perspectives without citing sources
 - If results are from different provinces, clarify jurisdictional differences
 - If information is outdated or unclear, mention this
@@ -102,7 +105,8 @@ Please provide a comprehensive, well-structured answer to this legal query based
 
             web_updates = self._format_latest_web_updates(results)
             if web_updates:
-                answer = f"{answer}\n\n{web_updates}"
+                answer = self._remove_latest_web_updates_section(answer)
+                answer = f"{web_updates}\n\n{answer.strip()}"
             
             logger.info(f"Generated answer for query in {detected_language}")
             
@@ -153,7 +157,7 @@ Content: {text}
         if not web_results:
             return ""
 
-        lines = ["## Latest Web Updates"]
+        lines = ["## Latest Web Updates", "- Priority: The latest verified web information is listed first."]
         for result in web_results[:3]:
             source = result.get("source", "Web Search Result")
             published_date = result.get("published_date") or "Unknown publish date"
@@ -162,6 +166,28 @@ Content: {text}
             lines.append(f"- {source} | Published: {published_date} | Retrieved: {retrieved_at} | {source_url}")
 
         return "\n".join(lines)
+
+    def _remove_latest_web_updates_section(self, answer: str) -> str:
+        """
+        Remove any model-generated Latest Web Updates section to avoid duplicates.
+        """
+        if not answer:
+            return ""
+
+        lines = answer.splitlines()
+        start_idx = None
+        heading_pattern = re.compile(r"^#{0,3}\s*latest\s+web\s+updates\s*$", re.IGNORECASE)
+
+        for idx, line in enumerate(lines):
+            if heading_pattern.match(line.strip()):
+                start_idx = idx
+                break
+
+        if start_idx is None:
+            return answer.strip()
+
+        cleaned = "\n".join(lines[:start_idx]).strip()
+        return cleaned or answer.strip()
     
     def _get_no_results_message(self, language: str) -> str:
         """
